@@ -1,5 +1,5 @@
 import { StorageProvider } from "./StorageProvider";
-import * as StorageClient from "@google-cloud/storage";
+import Storage from "@google-cloud/storage";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
@@ -12,7 +12,7 @@ export interface GCSStorageOptions {
 
 export class GCSStorage implements StorageProvider {
   private bucketName: string;
-  private storageClient: StorageClient.Storage;
+  private storageClient: Storage;
   private prefix?: string;
 
   constructor(bucketName: string, options?: GCSStorageOptions) {
@@ -29,7 +29,7 @@ export class GCSStorage implements StorageProvider {
       storageOptions.projectId = options.projectID;
     }
     
-    this.storageClient = new StorageClient.Storage(
+    this.storageClient = new Storage(
       Object.keys(storageOptions).length > 0 ? storageOptions : undefined
     );
   }
@@ -185,7 +185,7 @@ export class GCSStorage implements StorageProvider {
       }
       
       // Delete each file
-      await Promise.all(files.map((file) => file.delete()));
+      await Promise.all(files.map((file: { delete: () => Promise<unknown> }) => file.delete()));
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error("Error deleting session from GCS:", errorMessage);
