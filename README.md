@@ -66,6 +66,25 @@ async function example() {
 
   // Your browser automation code here...
 
+  // Launch Chrome with the mounted profile and additional configurations
+  console.log("Launching Chrome browser with additional configurations...");
+  const chromeContext = await chromium.launchPersistentContext(userDataDir, {
+    headless: false, // Launch in non-headless mode for visibility
+    slowMo: 100, // Slow down operations for demo purposes
+    userDataDir: userDataDir, // Use the userDataDir from BrowserState
+    // Additional configurations can be added here as needed
+  });
+
+  // Perform browser automation tasks with the launched browser context
+  // Example: Navigate to a website and perform actions
+  const page = await chromeContext.newPage();
+  await page.goto('https://example.com');
+  await page.locator('text=Click me').click();
+
+  // Close the browser context to free up resources
+  console.log("Closing Chrome browser...");
+  await chromeContext.close();
+
   // Unmount and save the session
   await browserState.unmount();
 
