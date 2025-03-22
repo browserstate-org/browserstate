@@ -71,14 +71,26 @@ export class GCSStorage implements StorageProvider {
     await fs.emptyDir(targetPath);
     
     try {
+      // First check if the bucket exists 
+      console.log(`Checking if bucket "${this.bucketName}" exists...`);
+      const [exists] = await bucket.exists();
+      if (!exists) {
+        throw new Error(`GCS bucket "${this.bucketName}" does not exist or is not accessible`);
+      }
+      
+      console.log(`Bucket "${this.bucketName}" found, downloading files...`);
+      
       // List all files with the session prefix
       const [files] = await bucket.getFiles({ prefix });
       
       if (files.length === 0) {
+        console.log(`No existing state found at ${prefix}, creating new state directory`);
         // Create an empty directory for new sessions
         await fs.ensureDir(targetPath);
         return targetPath;
       }
+      
+      console.log(`Found ${files.length} files to download`);
       
       // Download each file
       for (const file of files) {
@@ -98,10 +110,19 @@ export class GCSStorage implements StorageProvider {
       
       return targetPath;
     } catch (error: unknown) {
-      // Ensure directory exists even if download fails
-      await fs.ensureDir(targetPath);
+      // Critical errors should be thrown
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error("Error downloading from GCS:", errorMessage);
+      
+      // Always throw bucket not found errors
+      if (errorMessage.includes("does not exist") || 
+          errorMessage.includes("not accessible") ||
+          errorMessage.includes("notFound")) {
+        throw error;
+      }
+      
+      // Ensure directory exists for non-critical errors
+      await fs.ensureDir(targetPath);
       return targetPath;
     }
   }

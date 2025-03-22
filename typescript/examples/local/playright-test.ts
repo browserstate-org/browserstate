@@ -1,6 +1,6 @@
 import { BrowserState } from "../src";
 import { chromium } from "playwright"; // You'll need to install playwright
- 
+
 /**
  * Example demonstrating how to use BrowserState with Playwright
  */

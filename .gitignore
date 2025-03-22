@@ -44,3 +44,10 @@ browser-profiles/
 examples/**/test-results/
 examples/**/playwright-report/
 **/browserstate-*/
+
+# Credentials
+**/service-account*.json
+**/credentials*.json
+**/*-key.json
+typescript/examples/google/service-account.json
+typescript/examples/s3/aws-credentials.json

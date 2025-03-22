@@ -1,8 +1,8 @@
 import { BrowserState } from "../src";
-import { chromium } from "playwright"; // You'll need to install playwright
- 
+import puppeteer from "puppeteer"; // You'll need to install puppeteer
+
 /**
- * Example demonstrating how to use BrowserState with Playwright
+ * Example demonstrating how to use BrowserState with Puppeteer
  */
 async function main() {
   // Initialize the BrowserState with local storage
@@ -15,7 +15,7 @@ async function main() {
   });
 
   // Session ID to use
-  const sessionID = "my-playwright-session";
+  const sessionID = "my-puppeteer-session";
 
   try {
     // Mount the browser session
@@ -23,17 +23,19 @@ async function main() {
     const userDataDir = await browserState.mount(sessionID);
     console.log(`Session mounted at: ${userDataDir}`);
 
-    // Launch browser with persistent context using the mounted session
+    // Launch browser with user data directory
     console.log("Launching browser...");
-    const browser = await chromium.launchPersistentContext(userDataDir, {
+    const browser = await puppeteer.launch({
       headless: false,
-      // Add other Playwright options as needed
+      userDataDir: userDataDir,
+      // Add other Puppeteer options as needed
     });
 
     // Use the browser for automation
     const page = await browser.newPage();
     await page.goto("https://example.com");
-    console.log(`Page title: ${await page.title()}`);
+    const title = await page.title();
+    console.log(`Page title: ${title}`);
 
     // Wait a bit to see the browser in action
     await new Promise(resolve => setTimeout(resolve, 5000));
@@ -58,4 +60,4 @@ async function main() {
 // Run the example if this file is executed directly
 if (require.main === module) {
   main().catch(console.error);
-}  
+} 
