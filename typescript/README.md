@@ -2,6 +2,16 @@
 
 BrowserState is a Node.js library for managing browser profiles across different storage providers, including local storage, AWS S3, and Google Cloud Storage.
 
+## Implementation Status
+
+| Storage Provider | Status |
+|------------------|--------|
+| Local Storage | ✅ Extensively tested |
+| S3 Storage | ⚠️ Implemented, needs additional testing |
+| GCS Storage | ⚠️ Implemented, needs additional testing |
+
+Currently, we recommend using the local storage provider for production use cases. Cloud storage providers are available but should be thoroughly tested in your environment before production use.
+
 ## Installation
 
 ```bash
@@ -125,6 +135,19 @@ The main class for managing browser state.
 - `unmount()`: Uploads and cleans up the current session
 - `listSessions()`: Lists all available sessions for the user
 - `deleteSession(sessionId: string)`: Deletes a specific session
+
+## Issues and Feedback
+
+If you encounter any issues or have feedback about specific storage providers:
+
+1. Check the existing GitHub issues to see if your problem has been reported
+2. Create a new issue with:
+   - A clear description of the problem
+   - Which storage provider you're using
+   - Steps to reproduce the issue
+   - Environment details (Node.js version, browser, etc.)
+
+We especially welcome feedback and testing reports for the S3 and GCS storage providers.
 
 ## License
 
