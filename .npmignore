@@ -1,26 +1,45 @@
 # Source
 src/
+examples/
 tests/
-__tests__/
-**/*.test.ts
-
-# Config files
-.gitignore
-.eslintrc.js
-.prettierrc
-tsconfig.json
 jest.config.js
-.github/
 
-# Dev tools
-coverage/
+# Configuration
+.eslintrc
+.eslintrc.js
+.eslintrc.cjs
+.eslintrc.yaml
+.eslintrc.yml
+.eslintrc.json
+.eslintignore
+.prettierrc
+.prettierrc.js
+.prettierrc.cjs
+.prettierrc.yaml
+.prettierrc.yml
+.prettierrc.json
+.prettierignore
+tsconfig.json
+eslint.config.mjs
+
+# Editor configs
 .vscode/
 .idea/
 
-# Docs
-docs/
-*.md
-!README.md
+# Test files
+**/*.spec.ts
+**/*.test.ts
+
+# Git and GitHub
+.git/
+.github/
+.gitattributes
+
+# Browser profile data
+browser-profiles/
+**/browser_profiles/
+**/userdata/
+**/.browser-sessions/
 
 # Logs
 *.log

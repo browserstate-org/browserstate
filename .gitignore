@@ -34,6 +34,7 @@ Thumbs.db
 
 # Browser Profiles
 **/.browser-sessions/
+browser-profiles/
 **/browser_profiles/
 **/userdata/
 **/.browser-state/
@@ -42,4 +43,4 @@ Thumbs.db
 **/.playwright/
 examples/**/test-results/
 examples/**/playwright-report/
-**/browserstate-*/ 
+**/browserstate-*/

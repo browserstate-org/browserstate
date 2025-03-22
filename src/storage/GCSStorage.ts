@@ -1,5 +1,5 @@
 import { StorageProvider } from "./StorageProvider";
-import Storage from "@google-cloud/storage";
+import { Storage } from "@google-cloud/storage";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
