@@ -15,7 +15,12 @@
     "prepare": "npm run build",
     "playwright": "npx playwright test",
     "playwright:ui": "npx playwright test --ui",
-    "playwright:debug": "npx playwright test --debug"
+    "playwright:debug": "npx playwright test --debug",
+    "preversion": "npm run lint && npm run build && npm test",
+    "release:patch": "npm version patch && npm publish",
+    "release:minor": "npm version minor && npm publish",
+    "release:major": "npm version major && npm publish",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "browser",
