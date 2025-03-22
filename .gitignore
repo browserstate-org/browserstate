@@ -31,3 +31,15 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo 
+
+# Browser Profiles
+**/.browser-sessions/
+**/browser_profiles/
+**/userdata/
+**/.browser-state/
+**/.browserstate/
+**/User Data/
+**/.playwright/
+examples/**/test-results/
+examples/**/playwright-report/
+**/browserstate-*/ 
