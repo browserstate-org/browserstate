@@ -67,62 +67,98 @@ export class GCSStorage implements StorageProvider {
     const prefix = this.getSessionPrefix(userId, sessionId);
     const targetPath = this.getTempPath(userId, sessionId);
     
-    // Clear target directory if it exists
+    console.log(`[GCS] Preparing to download session from GCS bucket "${this.bucketName}"`);
+    console.log(`[GCS] Session path in cloud: ${prefix}`);
+    console.log(`[GCS] Local target path: ${targetPath}`);
+    
+    // Create empty directory first to ensure we can return something even if later steps fail
+    await fs.ensureDir(targetPath);
     await fs.emptyDir(targetPath);
     
     try {
       // First check if the bucket exists 
-      console.log(`Checking if bucket "${this.bucketName}" exists...`);
+      console.log(`[GCS] Checking if bucket "${this.bucketName}" exists...`);
       const [exists] = await bucket.exists();
       if (!exists) {
-        throw new Error(`GCS bucket "${this.bucketName}" does not exist or is not accessible`);
-      }
-      
-      console.log(`Bucket "${this.bucketName}" found, downloading files...`);
-      
-      // List all files with the session prefix
-      const [files] = await bucket.getFiles({ prefix });
-      
-      if (files.length === 0) {
-        console.log(`No existing state found at ${prefix}, creating new state directory`);
-        // Create an empty directory for new sessions
-        await fs.ensureDir(targetPath);
+        const error = `GCS bucket "${this.bucketName}" does not exist or is not accessible`;
+        console.error(`[GCS] ${error}`);
+        console.log(`[GCS] Falling back to new empty state directory at ${targetPath}`);
         return targetPath;
       }
       
-      console.log(`Found ${files.length} files to download`);
+      console.log(`[GCS] Bucket "${this.bucketName}" found, checking for existing state...`);
       
-      // Download each file
-      for (const file of files) {
-        // Calculate relative path within the session
-        const relativePath = file.name.slice(prefix.length + 1);
-        if (!relativePath) continue; // Skip the directory itself
+      // Check if the state directory exists by looking for any files with the prefix
+      try {
+        const [files] = await bucket.getFiles({ 
+          prefix,
+          maxResults: 5 // Only need to check if any files exist, don't need all
+        });
         
-        // Create the local file path
-        const localFilePath = path.join(targetPath, relativePath);
+        if (files.length === 0) {
+          console.log(`[GCS] ✨ No existing state found in cloud at ${prefix}`);
+          console.log(`[GCS] ✨ Using new empty state directory at ${targetPath}`);
+          return targetPath;
+        }
         
-        // Ensure the directory exists
-        await fs.ensureDir(path.dirname(localFilePath));
+        console.log(`[GCS] Found existing state in cloud with at least ${files.length} files`);
+        console.log(`[GCS] Downloading files from GCS to ${targetPath}...`);
         
-        // Download the file
-        await file.download({ destination: localFilePath });
+        // Now get the full list of files
+        const [allFiles] = await bucket.getFiles({ prefix });
+        
+        // Download each file with tracking and timeout
+        let downloadedCount = 0;
+        const DOWNLOAD_TIMEOUT = 30000; // 30 seconds timeout per file
+        
+        for (const file of allFiles) {
+          // Calculate relative path within the session
+          const relativePath = file.name.slice(prefix.length + 1);
+          if (!relativePath) continue; // Skip the directory itself
+          
+          // Create the local file path
+          const localFilePath = path.join(targetPath, relativePath);
+          
+          // Ensure the directory exists
+          await fs.ensureDir(path.dirname(localFilePath));
+          
+          try {
+            // Download the file with timeout
+            const downloadPromise = file.download({ destination: localFilePath });
+            await Promise.race([
+              downloadPromise,
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error(`Download timeout for ${relativePath}`)), DOWNLOAD_TIMEOUT)
+              )
+            ]);
+            
+            downloadedCount++;
+            if (downloadedCount % 10 === 0 || downloadedCount === allFiles.length) {
+              console.log(`[GCS] Downloaded ${downloadedCount}/${allFiles.length} files (${Math.round(downloadedCount/allFiles.length*100)}%)...`);
+            }
+          } catch (downloadError) {
+            console.error(`[GCS] Error downloading file ${relativePath}: ${downloadError instanceof Error ? downloadError.message : String(downloadError)}`);
+            // Continue with next file
+          }
+        }
+        
+        if (downloadedCount === 0 && allFiles.length > 0) {
+          console.log(`[GCS] ⚠️ Warning: Failed to download any files from cloud. Using empty state directory.`);
+          return targetPath;
+        }
+        
+        console.log(`[GCS] Successfully downloaded ${downloadedCount}/${allFiles.length} files to ${targetPath}`);
+        return targetPath;
+      } catch (listError) {
+        console.error(`[GCS] Error listing files: ${listError instanceof Error ? listError.message : String(listError)}`);
+        console.log(`[GCS] Falling back to new empty state directory at ${targetPath}`);
+        return targetPath;
       }
-      
-      return targetPath;
     } catch (error: unknown) {
-      // Critical errors should be thrown
+      // Log the error but return the empty directory path
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error("Error downloading from GCS:", errorMessage);
-      
-      // Always throw bucket not found errors
-      if (errorMessage.includes("does not exist") || 
-          errorMessage.includes("not accessible") ||
-          errorMessage.includes("notFound")) {
-        throw error;
-      }
-      
-      // Ensure directory exists for non-critical errors
-      await fs.ensureDir(targetPath);
+      console.error(`[GCS] Error during download from GCS: ${errorMessage}`);
+      console.log(`[GCS] Falling back to new empty state directory at ${targetPath}`);
       return targetPath;
     }
   }
@@ -134,20 +170,33 @@ export class GCSStorage implements StorageProvider {
     const bucket = this.storageClient.bucket(this.bucketName);
     const prefix = this.getSessionPrefix(userId, sessionId);
     
+    console.log(`[GCS] Preparing to upload session to GCS bucket "${this.bucketName}"`);
+    console.log(`[GCS] Target path in cloud: ${prefix}`);
+    console.log(`[GCS] Source local path: ${filePath}`);
+    
     try {
       // Read all files in the directory
       const files = await this.getAllFiles(filePath);
+      console.log(`[GCS] Found ${files.length} files to upload`);
       
       // Upload each file
+      let uploadedCount = 0;
       for (const file of files) {
         const relativePath = path.relative(filePath, file);
         const destination = `${prefix}/${relativePath}`;
         
         await bucket.upload(file, { destination });
+        uploadedCount++;
+        
+        if (uploadedCount % 10 === 0) {
+          console.log(`[GCS] Uploaded ${uploadedCount}/${files.length} files...`);
+        }
       }
+      
+      console.log(`[GCS] Successfully uploaded all ${files.length} files to cloud at ${prefix}`);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error("Error uploading to GCS:", errorMessage);
+      console.error(`[GCS] Error uploading to GCS: ${errorMessage}`);
       throw new Error(`Failed to upload session to Google Cloud Storage: ${errorMessage}`);
     }
   }
@@ -159,11 +208,16 @@ export class GCSStorage implements StorageProvider {
     const bucket = this.storageClient.bucket(this.bucketName);
     const prefix = this.getUserPrefix(userId);
     
+    console.log(`[GCS] Listing available sessions for user ${userId} in bucket "${this.bucketName}"`);
+    console.log(`[GCS] Looking in path: ${prefix}/`);
+    
     try {
       // List all files with the user prefix
       const [files] = await bucket.getFiles({
         prefix: `${prefix}/`
       });
+      
+      console.log(`[GCS] Found ${files.length} files under user path`);
       
       // Extract session IDs from file paths
       const sessions = new Set<string>();
@@ -182,10 +236,12 @@ export class GCSStorage implements StorageProvider {
         }
       }
       
-      return Array.from(sessions);
+      const sessionsList = Array.from(sessions);
+      console.log(`[GCS] Identified ${sessionsList.length} unique sessions: ${sessionsList.join(', ')}`);
+      return sessionsList;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error("Error listing sessions from GCS:", errorMessage);
+      console.error(`[GCS] Error listing sessions from GCS: ${errorMessage}`);
       return [];
     }
   }
@@ -197,19 +253,35 @@ export class GCSStorage implements StorageProvider {
     const bucket = this.storageClient.bucket(this.bucketName);
     const prefix = this.getSessionPrefix(userId, sessionId);
     
+    console.log(`[GCS] Deleting session ${sessionId} for user ${userId} from bucket "${this.bucketName}"`);
+    console.log(`[GCS] Deleting path: ${prefix}/`);
+    
     try {
       // List all files with the session prefix
       const [files] = await bucket.getFiles({ prefix });
       
       if (files.length === 0) {
-        return; // Nothing to delete
+        console.log(`[GCS] No files found for session ${sessionId}`);
+        return;
       }
       
+      console.log(`[GCS] Found ${files.length} files to delete`);
+      
       // Delete each file
-      await Promise.all(files.map((file: { delete: () => Promise<unknown> }) => file.delete()));
+      let deletedCount = 0;
+      for (const file of files) {
+        await file.delete();
+        deletedCount++;
+        
+        if (deletedCount % 10 === 0) {
+          console.log(`[GCS] Deleted ${deletedCount}/${files.length} files...`);
+        }
+      }
+      
+      console.log(`[GCS] Successfully deleted all ${files.length} files for session ${sessionId}`);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error("Error deleting session from GCS:", errorMessage);
+      console.error(`[GCS] Error deleting session from GCS: ${errorMessage}`);
       throw new Error(`Failed to delete session from Google Cloud Storage: ${errorMessage}`);
     }
   }

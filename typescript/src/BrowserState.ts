@@ -236,11 +236,15 @@ export class BrowserState {
     }
     
     try {
+      console.log(`⏳ Mounting browser state session: ${sessionId} for user: ${this.userId}`);
+      
       // If a session is already mounted, unmount it first
       if (this.currentSession && this.sessionPath) {
+        console.log(`ℹ️ Another session is currently mounted (${this.currentSession}). Unmounting it first...`);
         await this.unmount();
       }
       
+      console.log(`🔍 Attempting to download state from storage provider...`);
       // Download the session files to a local directory
       const userDataDir = await this.storageProvider.download(this.userId, sessionId);
       
@@ -248,9 +252,11 @@ export class BrowserState {
       this.currentSession = sessionId;
       this.sessionPath = userDataDir;
       
+      console.log(`✅ Browser state mounted successfully at: ${userDataDir}`);
       return userDataDir;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Failed to mount session ${sessionId}: ${errorMessage}`);
       throw new Error(`Failed to mount session ${sessionId}: ${errorMessage}`);
     }
   }
@@ -264,11 +270,17 @@ export class BrowserState {
     }
     
     try {
+      console.log(`⏳ Unmounting session: ${this.currentSession}...`);
+      console.log(`🔄 Uploading changes to storage provider...`);
+      
       // Upload any changes
       await this.storageProvider.upload(this.userId, this.currentSession, this.sessionPath);
       
+      console.log(`🧹 Cleaning up local files...`);
       // Clean up local files
       await fs.remove(this.sessionPath);
+      
+      console.log(`✅ Session ${this.currentSession} unmounted and saved successfully`);
       
       // Reset session tracking
       this.currentSession = undefined;
@@ -277,6 +289,7 @@ export class BrowserState {
       return;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Failed to unmount session: ${errorMessage}`);
       throw new Error(`Failed to unmount session: ${errorMessage}`);
     }
   }

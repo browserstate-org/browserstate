@@ -31,7 +31,7 @@ Now you can move fast without breaking sessions.
 |---------|------------|--------|
 | Local Storage | ✅ Tested | ✅ Implemented |
 | S3 Storage | ⚠️ Implemented | ⚠️ Implemented |
-| GCS Storage | ⚠️ Implemented | ⚠️ Implemented |
+| GCS Storage | ✅ Tested and works, but requires more extensive testing | ⚠️ Implemented |
 | Browser Compatibility | Chrome, Firefox, Edge | Chrome, Firefox, Edge |
 
 ## Usage

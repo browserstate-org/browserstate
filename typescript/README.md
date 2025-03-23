@@ -20,7 +20,7 @@ Now you can move fast without breaking sessions.
 |------------------|--------|
 | Local Storage | ✅ Extensively tested |
 | S3 Storage | ⚠️ Implemented, needs additional testing |
-| GCS Storage | ⚠️ Implemented, needs additional testing |
+| GCS Storage | ✅ Tested and works, but requires more extensive testing in different environments |
 
 Currently, we recommend using the local storage provider for production use cases. Cloud storage providers are available but should be thoroughly tested in your environment before production use.
 

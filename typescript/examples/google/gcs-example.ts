@@ -17,28 +17,6 @@ import { config } from './config';
  * To customize settings, edit the config.ts file rather than modifying this example.
  */
 async function main() {
-  // Process command line arguments
-  const args = process.argv.slice(2);
-  
-  // Show help if requested
-  if (args.includes('--help') || args.includes('-h')) {
-    console.log(`
-Usage: npx ts-node gcs-example.ts [stateID] [options]
-
-Options:
-  --list         List all available states
-  --delete ID    Delete the specified state
-  --help, -h     Show this help message
-
-Examples:
-  npx ts-node gcs-example.ts                    # Create/use a random state ID
-  npx ts-node gcs-example.ts my-state           # Use a specific state ID
-  npx ts-node gcs-example.ts --list             # List all available states
-  npx ts-node gcs-example.ts --delete my-state  # Delete a specific state
-    `);
-    return;
-  }
-
   // Verify service account file exists
   if (!fs.existsSync(config.serviceAccountPath)) {
     console.error('ERROR: Service account file not found at:', config.serviceAccountPath);
@@ -60,55 +38,14 @@ Examples:
     }
   });
 
-  // List all sessions
-  if (args.includes('--list')) {
-    try {
-      const states = await browserState.listSessions();
-      console.log('\nAvailable states:');
-      if (states.length === 0) {
-        console.log('  No states found');
-      } else {
-        states.forEach(state => {
-          console.log(`  - ${state}`);
-        });
-      }
-      return;
-    } catch (error) {
-      console.error('Error listing states:', error);
-      return;
-    }
-  }
-
-  // Delete a session
-  if (args.includes('--delete')) {
-    const deleteIndex = args.indexOf('--delete');
-    const stateToDelete = args[deleteIndex + 1];
-    
-    if (!stateToDelete) {
-      console.error('Error: No state ID specified for deletion');
-      console.error('Usage: npx ts-node gcs-example.ts --delete STATE_ID');
-      return;
-    }
-
-    try {
-      console.log(`Deleting state: ${stateToDelete}`);
-      await browserState.deleteSession(stateToDelete);
-      console.log('State deleted successfully');
-      return;
-    } catch (error) {
-      console.error('Error deleting state:', error);
-      return;
-    }
-  }
-
   try {
-    // State ID - can be provided by user or generated
-    const stateID = args[0] || `state-${Date.now()}`;
+    // Use a fixed session ID for simplicity
+    const sessionID = "my-gcs-session";
     
     // Mount the browser state
-    console.log(`Mounting state ${stateID}...`);
-    const userDataDir = await browserState.mount(stateID);
-    console.log(`State mounted successfully at: ${userDataDir}`);
+    console.log(`Mounting browser state with ID: ${sessionID}...`);
+    const userDataDir = await browserState.mount(sessionID);
+    console.log(`Browser state mounted successfully at: ${userDataDir}`);
 
     // Launch browser with persistent context using the mounted state
     console.log('Launching browser...');
@@ -139,9 +76,11 @@ Examples:
     await browser.close();
 
     // Unmount the state to save changes
-    console.log("Unmounting state...");
+    console.log("Unmounting browser state...");
     await browserState.unmount();
-    console.log("State unmounted and saved");
+    console.log("Browser state unmounted and saved to Google Cloud Storage");
+  
+    
   } catch (error) {
     console.error('Error:', error);
     

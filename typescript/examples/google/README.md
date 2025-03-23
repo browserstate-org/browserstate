@@ -2,6 +2,10 @@
 
 This example demonstrates how to use BrowserState with Google Cloud Storage (GCS) to persist browser profiles in the cloud.
 
+## Status
+
+✅ GCS integration has been tested and works but requires more extensive testing in different environments.
+
 ## Prerequisites
 
 1. Create a Google Cloud Platform (GCP) project
@@ -29,34 +33,31 @@ All parameters for the example are stored in the `config.ts` file. Edit this fil
 
 2. Configure your settings in `config.ts`
 
-3. Run the example with one of the following commands:
-
+3. Run the example:
    ```
-   # Run with a new random state ID
+   cd typescript/examples/google
    npx ts-node gcs-example.ts
-   
-   # Run with a specific state ID
-   npx ts-node gcs-example.ts my-state-name
-   
-   # List all available states
-   npx ts-node gcs-example.ts --list
-   
-   # Delete a specific state
-   npx ts-node gcs-example.ts --delete my-state-name
-   
-   # Show help and all options
-   npx ts-node gcs-example.ts --help
    ```
 
-## State Management
+This will:
+- Mount a browser state with ID "my-gcs-session"
+- Launch a browser using the mounted state
+- Navigate to example.com and store some data
+- Close the browser after 30 seconds
+- Unmount and save the browser state to GCS
+- List available browser states in your GCS bucket
 
-The example supports several state-related operations:
+## Notes on Testing
 
-- **Creating/Using States**: When you run the example with a state ID, it will create a new state if it doesn't exist, or use an existing one if it does.
-  
-- **Listing States**: Use the `--list` option to see all states stored in your GCS bucket.
-  
-- **Deleting States**: Remove unwanted states with the `--delete` option.
+The Google Cloud Storage integration has been tested but needs additional real-world validation. If you encounter issues, please consider:
+
+- Checking bucket permissions (Storage Admin role is recommended)
+- Verifying your service account has the necessary permissions
+- Trying with different browsers and profiles
+- Testing with larger profiles to ensure proper upload/download
+- Validating in CI/CD environments
+
+We welcome feedback on your experience with GCS storage!
 
 ## Getting Google Cloud Service Account Credentials
 
