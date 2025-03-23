@@ -1,15 +1,15 @@
 from .browser_state import (
     BrowserState,
     BrowserStateOptions,
-    LocalStorageOptions,
-    S3Options,
-    GCSOptions
+    LocalStorage,
+    S3Storage,
+    GCSStorage
 )
 
 __all__ = [
     'BrowserState',
     'BrowserStateOptions',
-    'LocalStorageOptions',
-    'S3Options',
-    'GCSOptions'
+    'LocalStorage',
+    'S3Storage',
+    'GCSStorage'
 ] 

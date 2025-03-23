@@ -1,3 +1,8 @@
+# Extra files
+python/examples/__init__.py
+python/browserstate/__pycache__/
+python/browserstate/storage/__pycache__/
+
 # Dependencies
 node_modules/
 npm-debug.log*
