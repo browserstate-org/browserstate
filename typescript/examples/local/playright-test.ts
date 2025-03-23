@@ -1,4 +1,4 @@
-import { BrowserState } from "../src";
+import { BrowserState } from "../../src";
 import { chromium } from "playwright"; // You'll need to install playwright
 
 /**
