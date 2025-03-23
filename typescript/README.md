@@ -8,9 +8,9 @@ Most browser automation workflows fail because authentication and session data d
 
 BrowserState fixes this by letting you save, transfer, and restore full browser states across machines effortlessly. Whether you're running Playwright, Selenium, or Pyppeteer, your automation just works, no matter where it runs.
 
-✅ Stop re-authenticating – Restore cookies, local storage, and session data seamlessly.
-✅ Works anywhere – Supports local storage, AWS S3, and Google Cloud.
-✅ Automation-friendly – Drop-in support for Playwright, Selenium, and Puppeteer.
+- ✅ Stop re-authenticating – Restore cookies, local storage, and session data seamlessly.
+- ✅ Works anywhere – Supports local storage, AWS S3, and Google Cloud.
+- ✅ Automation-friendly – Drop-in support for Playwright, Selenium, and Puppeteer.
 
 Now you can move fast without breaking sessions.
 
@@ -163,4 +163,4 @@ We especially welcome feedback and testing reports for the S3 and GCS storage pr
 
 ## License
 
-MIT 
+MIT
