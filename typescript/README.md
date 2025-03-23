@@ -2,6 +2,18 @@
 
 BrowserState is a Node.js library for managing browser profiles across different storage providers, including local storage, AWS S3, and Google Cloud Storage.
 
+
+# Why BrowserState?
+Most browser automation workflows fail because authentication and session data don't persist reliably across different environments. Manually handling cookies or re-authenticating slows everything down.
+
+BrowserState fixes this by letting you save, transfer, and restore full browser states across machines effortlessly. Whether you're running Playwright, Selenium, or Pyppeteer, your automation just works, no matter where it runs.
+
+✅ Stop re-authenticating – Restore cookies, local storage, and session data seamlessly.
+✅ Works anywhere – Supports local storage, AWS S3, and Google Cloud.
+✅ Automation-friendly – Drop-in support for Playwright, Selenium, and Puppeteer.
+
+Now you can move fast without breaking sessions.
+
 ## Implementation Status
 
 | Storage Provider | Status |
