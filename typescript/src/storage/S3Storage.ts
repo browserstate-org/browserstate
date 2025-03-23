@@ -8,6 +8,7 @@ import {
   GetObjectCommand,
   DeleteObjectsCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
   CreateBucketCommand,
   CreateBucketCommandInput,
   BucketLocationConstraint,
@@ -16,6 +17,8 @@ import {
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { Readable } from "stream";
+import util from "util";
+import stream from "stream";
 
 export interface S3StorageOptions {
   accessKeyId?: string;
@@ -351,5 +354,102 @@ export class S3Storage implements StorageProvider {
     }
 
     return files;
+  }
+
+  /**
+   * Uploads a single file to S3
+   * @param filePath - Path to the local file
+   * @param s3Key - S3 key (path) where the file will be stored
+   * @returns Promise resolving when upload is complete
+   */
+  async uploadFile(filePath: string, s3Key: string): Promise<void> {
+    try {
+      console.log(`[S3] Uploading single file to S3: ${filePath} -> ${s3Key}`);
+
+      // Read file content
+      const fileContent = await fs.readFile(filePath);
+
+      // Upload the file
+      const upload = new Upload({
+        client: this.s3Client,
+        params: {
+          Bucket: this.bucketName,
+          Key: s3Key,
+          Body: fileContent,
+        },
+      });
+
+      await upload.done();
+      console.log(`[S3] Successfully uploaded file to ${s3Key}`);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.error(`[S3] Error uploading file to S3: ${errorMessage}`);
+      throw new Error(`Failed to upload file to S3: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Downloads a single file from S3
+   * @param s3Key - S3 key (path) of the file to download
+   * @param localPath - Local path where to save the file
+   * @returns Promise resolving to boolean indicating if file was downloaded
+   */
+  async downloadFile(s3Key: string, localPath: string): Promise<boolean> {
+    try {
+      console.log(
+        `[S3] Downloading single file from S3: ${s3Key} -> ${localPath}`,
+      );
+
+      // Ensure the directory exists
+      await fs.ensureDir(path.dirname(localPath));
+
+      // Check if the file exists in S3
+      try {
+        await this.s3Client.send(
+          new HeadObjectCommand({
+            Bucket: this.bucketName,
+            Key: s3Key,
+          }),
+        );
+      } catch {
+        // File does not exist
+        console.log(`[S3] File does not exist in S3: ${s3Key}`);
+        return false;
+      }
+
+      // Download the file
+      const getCommand = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: s3Key,
+      });
+
+      const response = await this.s3Client.send(getCommand);
+      const Body = response.Body;
+
+      if (!Body) {
+        console.log(`[S3] Empty file or download failed: ${s3Key}`);
+        return false;
+      }
+
+      // Write the file locally
+      if (Body instanceof Readable) {
+        const writeStream = fs.createWriteStream(localPath);
+        const pipeline = util.promisify(stream.pipeline);
+        await pipeline(Body as Readable, writeStream);
+      } else if (Body instanceof Buffer || typeof Body === "string") {
+        await fs.writeFile(localPath, Body);
+      } else {
+        throw new Error(`Unexpected response type for S3 object Body`);
+      }
+
+      console.log(`[S3] Successfully downloaded file from ${s3Key}`);
+      return true;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.error(`[S3] Error downloading file from S3: ${errorMessage}`);
+      return false;
+    }
   }
 }

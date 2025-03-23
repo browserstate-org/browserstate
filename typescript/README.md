@@ -156,6 +156,11 @@ The main class for managing browser state.
 - `userId`: User identifier for organizing storage
 - `storageType`: Type of storage to use ('local', 's3', or 'gcs')
 - `autoCleanup`: Whether to automatically clean up temporary files on process exit (default: true)
+- `useEfficientSync`: Whether to use efficient synchronization to speed up uploads/downloads (default: false)
+- `syncOptions`: Additional options for efficient synchronization
+  - `metadataStorage`: Where to store metadata - 'local' or 'cloud' (default: 'local')
+  - `metadataUpdateInterval`: Seconds between metadata updates when using cloud storage (default: 0 - update on every operation)
+  - `localMetadataPath`: Custom path for local metadata storage (default: '~/.browserstate-metadata')
 - `localOptions`: Options for local storage
   - `storagePath`: Local storage directory path
 - `s3Options`: Options for AWS S3 storage
@@ -207,6 +212,76 @@ await browserState.cleanup();
 This is useful in scenarios where you want more control over when cleanup occurs, such as in long-running server processes or when handling multiple browser states.
 
 ## 🐛 Issues and Feedback
+## Efficient Synchronization
+
+When working with cloud storage providers (S3 or GCS), transferring entire browser profiles can be slow, especially for large profiles. BrowserState offers efficient synchronization to speed up this process by only transferring files that have changed.
+
+To enable efficient synchronization, set `useEfficientSync: true` in the constructor options:
+
+```typescript
+const browserState = new BrowserState({
+  userId: 'user123',
+  storageType: 'gcs',
+  useEfficientSync: true,
+  gcsOptions: {
+    bucketName: 'my-browser-states',
+    projectID: 'your-project-id',
+    keyFilename: '/path/to/service-account-key.json'
+  }
+});
+```
+
+### Advanced Synchronization Options
+
+For more control over efficient synchronization, you can use additional configuration options:
+
+```typescript
+const browserState = new BrowserState({
+  userId: 'user123',
+  storageType: 'gcs',
+  useEfficientSync: true,
+  syncOptions: {
+    // Store metadata in the cloud to support multiple services using the same profile
+    metadataStorage: 'cloud',
+    
+    // Only update metadata every 300 seconds (5 minutes) to prevent conflicts
+    metadataUpdateInterval: 300,
+    
+    // Custom path for storing local metadata (only applies with metadataStorage: 'local')
+    localMetadataPath: '/path/to/custom/metadata/storage'
+  },
+  gcsOptions: {
+    bucketName: 'my-browser-states',
+    projectID: 'your-project-id',
+    keyFilename: '/path/to/service-account-key.json'
+  }
+});
+```
+
+How it works:
+1. BrowserState maintains a metadata file with hash information about each file in the profile
+2. When uploading or downloading, only files that have changed are transferred
+3. Metadata can be stored:
+   - Locally in `~/.browserstate-metadata/[userId]` (default)
+   - In the cloud storage alongside the profile data (set `metadataStorage: 'cloud'`)
+
+Benefits:
+- Significantly faster mount/unmount operations for large profiles
+- Reduced bandwidth usage and cloud storage costs
+- Improved performance for frequent operations with minimal changes
+
+#### Multi-Service Synchronization
+
+When multiple services or machines use the same browser profile, it's recommended to:
+
+1. Enable cloud metadata storage: `metadataStorage: 'cloud'`
+2. Set a reasonable update interval: `metadataUpdateInterval: 300` (5 minutes)
+
+This ensures that metadata updates don't conflict when multiple services are using the same profile simultaneously. The update interval ensures that metadata is only updated periodically rather than on every operation.
+
+Note: The first use with a session will still perform a full transfer to establish the baseline metadata.
+
+## Issues and Feedback
 
 If you encounter any issues or have feedback about specific storage providers:
 

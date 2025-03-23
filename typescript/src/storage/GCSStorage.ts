@@ -365,4 +365,66 @@ export class GCSStorage implements StorageProvider {
 
     return files;
   }
+
+  /**
+   * Uploads a single file to Google Cloud Storage
+   * @param filePath - Path to the local file
+   * @param gcsPath - GCS path where the file will be stored
+   * @returns Promise resolving when upload is complete
+   */
+  async uploadFile(filePath: string, gcsPath: string): Promise<void> {
+    try {
+      console.log(
+        `[GCS] Uploading single file to GCS: ${filePath} -> ${gcsPath}`,
+      );
+
+      const bucket = this.storageClient.bucket(this.bucketName);
+      await bucket.upload(filePath, { destination: gcsPath });
+
+      console.log(`[GCS] Successfully uploaded file to ${gcsPath}`);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.error(`[GCS] Error uploading file to GCS: ${errorMessage}`);
+      throw new Error(`Failed to upload file to GCS: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Downloads a single file from Google Cloud Storage
+   * @param gcsPath - GCS path of the file to download
+   * @param localPath - Local path where to save the file
+   * @returns Promise resolving to boolean indicating if file was downloaded
+   */
+  async downloadFile(gcsPath: string, localPath: string): Promise<boolean> {
+    try {
+      console.log(
+        `[GCS] Downloading single file from GCS: ${gcsPath} -> ${localPath}`,
+      );
+
+      // Ensure the directory exists
+      await fs.ensureDir(path.dirname(localPath));
+
+      const bucket = this.storageClient.bucket(this.bucketName);
+      const file = bucket.file(gcsPath);
+
+      // Check if the file exists
+      const [exists] = await file.exists();
+      if (!exists) {
+        console.log(`[GCS] File does not exist in GCS: ${gcsPath}`);
+        return false;
+      }
+
+      // Download the file
+      await file.download({ destination: localPath });
+
+      console.log(`[GCS] Successfully downloaded file from ${gcsPath}`);
+      return true;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.error(`[GCS] Error downloading file from GCS: ${errorMessage}`);
+      return false;
+    }
+  }
 }

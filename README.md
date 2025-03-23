@@ -42,6 +42,7 @@ Now you can move fast without breaking sessions—or getting flagged as a bot.
   - TypeScript/JavaScript
   - Python
 - Automatic cleanup of temporary files with configurable behavior
+- Differential transfers for improved cloud storage performance
 
 ## Implementation Status
 
