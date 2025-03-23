@@ -7,7 +7,7 @@ A Python library for saving and restoring browser profiles across machines using
 - Save browser profiles (cookies, local storage, etc.) to different storage providers
 - Restore browser profiles on different machines
 - Support for multiple storage providers:
-  - ✅ Local storage (extensively tested)
+  - ⚠️ Local storage (implementation ready but needs testing)
   - ⚠️ AWS S3 (implemented but needs additional testing)
   - ⚠️ Google Cloud Storage (implemented but needs additional testing)
 - Works with popular browser automation tools:
@@ -19,11 +19,11 @@ A Python library for saving and restoring browser profiles across machines using
 
 | Storage Provider | Status |
 |------------------|--------|
-| Local Storage | ✅ Extensively tested |
+| Local Storage | ⚠️ Implementation ready but needs testing |
 | S3 Storage | ⚠️ Implemented, needs additional testing |
 | GCS Storage | ⚠️ Implemented, needs additional testing |
 
-Currently, we recommend using the local storage provider for production use cases. Cloud storage providers are available but should be thoroughly tested in your environment before production use.
+Please note that all storage providers need testing before being used in production. We recommend thorough testing in your specific environment before deploying this library in critical applications.
 
 ## Installation
 
@@ -53,16 +53,16 @@ from playwright.sync_api import sync_playwright
 options = BrowserStateOptions(user_id="user123")
 browser_state = BrowserState(options)
 
-# Mount a session (will create a new one if session_id is not provided)
-session = browser_state.mount_session()
-print(f"Mounted session: {session['id']}")
+# Mount a state (will create a new one if state_id is not provided)
+state = browser_state.mount(state_id="my-browser-state")
+print(f"Mounted state directory: {state}")
 
 # Use the browser
 with sync_playwright() as p:
     # Launch the browser with the user data directory
-    browser = p.chromium.launch(
-        headless=False,
-        user_data_dir=session["path"]
+    browser = p.chromium.launch_persistent_context(
+        user_data_dir=state,
+        headless=False
     )
     
     page = browser.new_page()
@@ -70,8 +70,8 @@ with sync_playwright() as p:
     # Do your browser automation...
     browser.close()
 
-# Save the session to storage
-browser_state.unmount_session()
+# Save the state to storage
+browser_state.unmount()
 ```
 
 ### Using AWS S3 Storage
@@ -94,24 +94,25 @@ s3_options = {
 options = BrowserStateOptions(user_id="user123", s3_options=s3_options)
 browser_state = BrowserState(options)
 
-# List existing sessions
-sessions = browser_state.list_sessions()
-print(f"Available sessions: {sessions}")
+# List existing states
+states = browser_state.list_sessions()
+print(f"Available states: {states}")
 
-# Mount a specific session or create a new one
-session = browser_state.mount_session(sessions[0] if sessions else None)
+# Mount a specific state or create a new one
+state_id = states[0] if states else "new-browser-state"
+user_data_dir = browser_state.mount(state_id)
 
 # Use with Selenium
 chrome_options = Options()
-chrome_options.add_argument(f"--user-data-dir={session['path']}")
+chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
 
 driver = webdriver.Chrome(options=chrome_options)
 driver.get("https://example.com")
 # Do your browser automation...
 driver.quit()
 
-# Save the session to storage
-browser_state.unmount_session()
+# Save the state to storage
+browser_state.unmount()
 ```
 
 ### Using Google Cloud Storage
@@ -150,11 +151,10 @@ Configuration options for BrowserState:
 
 Main class for managing browser profiles:
 
-- `mount_session(session_id=None)`: Downloads and mounts a browser session
-- `unmount_session()`: Uploads and cleans up the current browser session
-- `list_sessions()`: Lists all available sessions for the user
-- `delete_session(session_id)`: Deletes a browser session
-- `get_active_session()`: Gets details of the currently active session
+- `mount(state_id=None)`: Downloads and mounts a browser state, returns user data directory path
+- `unmount()`: Uploads and cleans up the current browser state
+- `list_sessions()`: Lists all available states for the user
+- `delete_session(state_id)`: Deletes a browser state
 
 ## Storage Providers
 

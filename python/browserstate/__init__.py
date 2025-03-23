@@ -1,4 +1,4 @@
-from .browserstate import (
+from .browser_state import (
     BrowserState,
     BrowserStateOptions,
     LocalStorageOptions,
