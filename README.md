@@ -20,10 +20,11 @@ Now you can move fast without breaking sessions.
 - Support for multiple storage providers:
   - ✅ Local storage (extensively tested)
   - ⚠️ AWS S3 (needs additional testing)
-  - ⚠️ Google Cloud Storage (needs additional testing)
+  - ✅ Google Cloud Storage (tested and works, but requires more extensive testing)
 - Language support:
   - TypeScript/JavaScript
   - Python
+- Automatic cleanup of temporary files with configurable behavior
 
 ## Implementation Status
 

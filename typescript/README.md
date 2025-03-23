@@ -81,6 +81,16 @@ const gcsBrowserState = new BrowserState({
   }
 });
 
+// With autoCleanup disabled
+const longRunningBrowserState = new BrowserState({
+  userId: 'user123',
+  storageType: 'local',
+  autoCleanup: false, // Disable automatic cleanup
+  localOptions: {
+    storagePath: '/path/to/local/storage'
+  }
+});
+
 // Use browser state
 async function example() {
   // Mount a session
@@ -129,6 +139,7 @@ The main class for managing browser state.
 
 - `userId`: User identifier for organizing storage
 - `storageType`: Type of storage to use ('local', 's3', or 'gcs')
+- `autoCleanup`: Whether to automatically clean up temporary files on process exit (default: true)
 - `localOptions`: Options for local storage
   - `storagePath`: Local storage directory path
 - `s3Options`: Options for AWS S3 storage
@@ -147,6 +158,37 @@ The main class for managing browser state.
 - `unmount()`: Uploads and cleans up the current session
 - `listSessions()`: Lists all available sessions for the user
 - `deleteSession(sessionId: string)`: Deletes a specific session
+- `cleanup()`: Manually clean up temporary files (useful when autoCleanup is disabled)
+
+## Automatic Cleanup
+
+BrowserState creates temporary files on your local system when working with browser profiles. By default, these files are automatically cleaned up when:
+
+1. You call `unmount()` to save the session
+2. The Node.js process exits normally
+3. The process is terminated with SIGINT (Ctrl+C)
+4. An uncaught exception occurs
+
+You can disable this automatic cleanup by setting `autoCleanup: false` in the constructor options:
+
+```typescript
+const browserState = new BrowserState({
+  userId: 'user123',
+  storageType: 'local',
+  autoCleanup: false,
+  localOptions: {
+    storagePath: '/path/to/local/storage'
+  }
+});
+```
+
+When automatic cleanup is disabled, you can manually clean up temporary files by calling:
+
+```typescript
+await browserState.cleanup();
+```
+
+This is useful in scenarios where you want more control over when cleanup occurs, such as in long-running server processes or when handling multiple browser states.
 
 ## Issues and Feedback
 
