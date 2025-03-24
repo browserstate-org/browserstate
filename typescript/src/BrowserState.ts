@@ -2,9 +2,6 @@ import { StorageProvider } from "./storage/StorageProvider";
 import { LocalStorage } from "./storage/LocalStorage";
 import { S3Storage } from "./storage/S3Storage";
 import { GCSStorage } from "./storage/GCSStorage";
-import { LocalStorageOptions } from "./storage/LocalStorage";
-import { S3Options } from "./storage/S3Storage";
-import { GCSOptions } from "./storage/GCSStorage";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
@@ -115,9 +112,12 @@ export interface BrowserStateOptions {
   gcsOptions?: GCSOptions;
 
   /**
-   * Whether to automatically clean up temporary files on process exit (default: true)
+   * How to handle cleanup of temporary files:
+   * - "always": Clean up on unmount and process exit (default)
+   * - "never": Never clean up files
+   * - "exit-only": Only clean up on process exit
    */
-  autoCleanup?: boolean;
+  cleanupMode?: "always" | "never" | "exit-only";
 
   /**
    * Whether to use efficient sync to speed up uploads/downloads (default: false)
@@ -135,7 +135,7 @@ export interface BrowserStateOptions {
     metadataStorage?: "local" | "cloud";
 
     /**
-     * How frequently to update metadata in seconds (default: 0 - update on every unmount)
+     * How frequently to update metadata in seconds (default: 0 - update on every operation)
      * Only applies when metadataStorage is set to "cloud"
      */
     metadataUpdateInterval?: number;
@@ -157,7 +157,7 @@ export class BrowserState {
   private currentSession?: string;
   private sessionPath?: string;
   private tempDir: string;
-  private autoCleanup: boolean;
+  private cleanupMode: "always" | "never" | "exit-only";
   private useSync: boolean;
   private metadataDir: string;
   private metadataStorage: "local" | "cloud";
@@ -172,7 +172,7 @@ export class BrowserState {
   constructor(options: BrowserStateOptions = {}) {
     // Set default user ID
     this.userId = options.userId || "default";
-    this.autoCleanup = options.autoCleanup !== false;
+    this.cleanupMode = options.cleanupMode || "always";
     this.useSync = options.useSync === true;
 
     // Set efficient sync options
@@ -218,11 +218,10 @@ export class BrowserState {
         if (!options.gcsOptions) {
           throw new Error("GCS options required when using gcs storage");
         }
-        this.storageProvider = new GCSStorage(options.gcsOptions.bucketName, {
-          keyFilePath: options.gcsOptions.keyFilename,
-          projectID: options.gcsOptions.projectID,
-          prefix: options.gcsOptions.prefix,
-        });
+        this.storageProvider = new GCSStorage(
+          options.gcsOptions.bucketName,
+          options.gcsOptions,
+        );
         break;
 
       case "local":
@@ -233,8 +232,8 @@ export class BrowserState {
         break;
     }
 
-    // Register cleanup handler for auto cleanup if enabled
-    if (this.autoCleanup) {
+    // Register cleanup handler if enabled
+    if (this.cleanupMode !== "never") {
       this.registerCleanupHandlers();
     }
   }
@@ -266,7 +265,7 @@ export class BrowserState {
     // Handle normal exit
     process.on("exit", () => {
       // Sync cleanup for 'exit' event
-      if (fs.existsSync(this.tempDir)) {
+      if (this.cleanupMode === "exit-only" && fs.existsSync(this.tempDir)) {
         try {
           fs.removeSync(this.tempDir);
         } catch (error) {
@@ -435,15 +434,89 @@ export class BrowserState {
         `[EfficientSync] Previous metadata found with ${previousMetadata.size} files. Starting incremental download.`,
       );
 
-      // At this point, we would implement a mechanism to only download changed files.
-      // However, for the initial implementation, we'll perform a full download
-      const userDataDir = await this.storageProvider.download(
-        this.userId,
-        sessionId,
+      // Get current metadata from cloud by downloading metadata file
+      const metadataKey = `${this.userId}/${sessionId}/.browserstate-metadata.json`;
+      const tempMetadataPath = path.join(
+        this.tempDir,
+        `${sessionId}-metadata.json`,
       );
 
-      // Generate metadata for the newly downloaded files
-      const currentMetadata = await this.getDirectoryMetadata(userDataDir);
+      let currentMetadata = new Map<string, FileMetadata>();
+      if (this.storageProvider instanceof GCSStorage) {
+        const gcs = this.storageProvider as GCSStorage;
+        const exists = await gcs.downloadFile(metadataKey, tempMetadataPath);
+        if (exists) {
+          const metadataContent = await fs.readFile(tempMetadataPath, "utf8");
+          const metadataObj = JSON.parse(metadataContent);
+          currentMetadata = new Map(Object.entries(metadataObj));
+          await fs.remove(tempMetadataPath);
+        }
+      } else if (this.storageProvider instanceof S3Storage) {
+        const s3 = this.storageProvider as S3Storage;
+        const exists = await s3.downloadFile(metadataKey, tempMetadataPath);
+        if (exists) {
+          const metadataContent = await fs.readFile(tempMetadataPath, "utf8");
+          const metadataObj = JSON.parse(metadataContent);
+          currentMetadata = new Map(Object.entries(metadataObj));
+          await fs.remove(tempMetadataPath);
+        }
+      }
+
+      // Calculate diffs
+      const diffs = this.getFileDiffs(currentMetadata, previousMetadata);
+      const { added, modified, removed } = diffs;
+
+      console.log(
+        `[EfficientSync] Changes detected: ${added.length} added, ${modified.length} modified, ${removed.length} removed.`,
+      );
+
+      // Download only changed files
+      let downloadedCount = 0;
+      const totalFiles = added.length + modified.length;
+
+      for (const filePath of [...added, ...modified]) {
+        const metadata = currentMetadata.get(filePath);
+        if (!metadata) continue;
+
+        // Calculate cloud path
+        const cloudPath = `${this.userId}/${sessionId}/${filePath}`;
+        const localPath = path.join(targetPath, filePath);
+
+        // Ensure directory exists
+        await fs.ensureDir(path.dirname(localPath));
+
+        // Download the file
+        let downloaded = false;
+        if (this.storageProvider instanceof S3Storage) {
+          const s3 = this.storageProvider as S3Storage;
+          downloaded = await s3.downloadFile(cloudPath, localPath);
+        } else if (this.storageProvider instanceof GCSStorage) {
+          const gcs = this.storageProvider as GCSStorage;
+          downloaded = await gcs.downloadFile(cloudPath, localPath);
+        }
+
+        if (downloaded) {
+          downloadedCount++;
+          if (downloadedCount % 10 === 0 || downloadedCount === totalFiles) {
+            console.log(
+              `[EfficientSync] Downloaded ${downloadedCount}/${totalFiles} changed files (${Math.round((downloadedCount / totalFiles) * 100)}%)...`,
+            );
+          }
+        }
+      }
+
+      // Remove deleted files
+      for (const filePath of removed) {
+        const localPath = path.join(targetPath, filePath);
+        try {
+          await fs.remove(localPath);
+        } catch (error) {
+          console.error(
+            `[EfficientSync] Error removing deleted file ${filePath}:`,
+            error,
+          );
+        }
+      }
 
       // Update metadata file for next time
       let shouldUpdateMetadata = true;
@@ -465,15 +538,15 @@ export class BrowserState {
       if (shouldUpdateMetadata) {
         await this.saveMetadata(sessionId, currentMetadata);
         console.log(
-          `[EfficientSync] Downloaded ${currentMetadata.size} files and updated metadata.`,
+          `[EfficientSync] Downloaded ${downloadedCount} changed files and updated metadata.`,
         );
       } else {
         console.log(
-          `[EfficientSync] Downloaded ${currentMetadata.size} files, metadata update skipped.`,
+          `[EfficientSync] Downloaded ${downloadedCount} changed files, metadata update skipped.`,
         );
       }
 
-      return userDataDir;
+      return targetPath;
     } catch (error) {
       console.error(`[EfficientSync] Error during efficient download:`, error);
       // Fallback to regular download on error
@@ -530,9 +603,58 @@ export class BrowserState {
         return;
       }
 
-      // For the initial implementation, we'll still do a full upload
-      // In a future iteration, we would implement partial uploads in each storage provider
-      await this.storageProvider.upload(this.userId, sessionId, filePath);
+      // Upload only changed files
+      let uploadedCount = 0;
+      const totalFiles = added.length + modified.length;
+
+      for (const filePath of [...added, ...modified]) {
+        const metadata = currentMetadata.get(filePath);
+        if (!metadata) continue;
+
+        // Calculate cloud path
+        const cloudPath = `${this.userId}/${sessionId}/${filePath}`;
+        const localPath = path.join(filePath, filePath);
+
+        // Upload the file
+        let uploaded = false;
+        if (this.storageProvider instanceof S3Storage) {
+          const s3 = this.storageProvider as S3Storage;
+          await s3.uploadFile(localPath, cloudPath);
+          uploaded = true;
+        } else if (this.storageProvider instanceof GCSStorage) {
+          const gcs = this.storageProvider as GCSStorage;
+          await gcs.uploadFile(localPath, cloudPath);
+          uploaded = true;
+        }
+
+        if (uploaded) {
+          uploadedCount++;
+          if (uploadedCount % 10 === 0 || uploadedCount === totalFiles) {
+            console.log(
+              `[EfficientSync] Uploaded ${uploadedCount}/${totalFiles} changed files (${Math.round((uploadedCount / totalFiles) * 100)}%)...`,
+            );
+          }
+        }
+      }
+
+      // Delete removed files from cloud
+      for (const filePath of removed) {
+        const cloudPath = `${this.userId}/${sessionId}/${filePath}`;
+        try {
+          if (this.storageProvider instanceof S3Storage) {
+            const s3 = this.storageProvider as S3Storage;
+            await s3.deleteSession(this.userId, cloudPath);
+          } else if (this.storageProvider instanceof GCSStorage) {
+            const gcs = this.storageProvider as GCSStorage;
+            await gcs.deleteSession(this.userId, cloudPath);
+          }
+        } catch (error) {
+          console.error(
+            `[EfficientSync] Error deleting file ${filePath} from cloud:`,
+            error,
+          );
+        }
+      }
 
       // Determine if we should update the metadata based on the update interval
       let shouldUpdateMetadata = true;

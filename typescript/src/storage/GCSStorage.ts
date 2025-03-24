@@ -4,10 +4,34 @@ import fs from "fs-extra";
 import path from "path";
 import os from "os";
 
-export interface GCSStorageOptions {
-  keyFilePath?: string;
+/**
+ * Options for Google Cloud Storage
+ */
+export interface GCSOptions {
+  /**
+   * GCS bucket name for storing browser profiles
+   */
+  bucketName: string;
+
+  /**
+   * Google Cloud project ID
+   */
   projectID?: string;
+
+  /**
+   * Path to service account key file
+   */
+  keyFilename?: string;
+
+  /**
+   * Optional prefix/folder path within the bucket
+   */
   prefix?: string;
+}
+
+interface GCSRateLimitError {
+  code?: number;
+  message?: string;
 }
 
 export class GCSStorage implements StorageProvider {
@@ -15,14 +39,14 @@ export class GCSStorage implements StorageProvider {
   private storageClient: Storage;
   private prefix?: string;
 
-  constructor(bucketName: string, options?: GCSStorageOptions) {
+  constructor(bucketName: string, options?: GCSOptions) {
     this.bucketName = bucketName;
     this.prefix = options?.prefix;
 
     const storageOptions: Record<string, unknown> = {};
 
-    if (options?.keyFilePath) {
-      storageOptions.keyFilename = options.keyFilePath;
+    if (options?.keyFilename) {
+      storageOptions.keyFilename = options.keyFilename;
     }
 
     if (options?.projectID) {
@@ -217,19 +241,53 @@ export class GCSStorage implements StorageProvider {
       const files = await this.getAllFiles(filePath);
       console.log(`[GCS] Found ${files.length} files to upload`);
 
-      // Upload each file
+      // Upload each file with rate limiting
       let uploadedCount = 0;
-      for (const file of files) {
-        const relativePath = path.relative(filePath, file);
-        const destination = `${prefix}/${relativePath}`;
+      const BATCH_SIZE = 5; // Process 5 files at a time
+      const RETRY_DELAY = 1000; // 1 second delay between retries
+      const MAX_RETRIES = 3;
 
-        await bucket.upload(file, { destination });
-        uploadedCount++;
+      for (let i = 0; i < files.length; i += BATCH_SIZE) {
+        const batch = files.slice(i, i + BATCH_SIZE);
+        const uploadPromises = batch.map(async (file) => {
+          const relativePath = path.relative(filePath, file);
+          const destination = `${prefix}/${relativePath}`;
 
-        if (uploadedCount % 10 === 0) {
-          console.log(
-            `[GCS] Uploaded ${uploadedCount}/${files.length} files...`,
-          );
+          let retries = 0;
+          while (retries < MAX_RETRIES) {
+            try {
+              await bucket.upload(file, { destination });
+              uploadedCount++;
+              if (uploadedCount % 10 === 0) {
+                console.log(
+                  `[GCS] Uploaded ${uploadedCount}/${files.length} files...`,
+                );
+              }
+              return;
+            } catch (error: unknown) {
+              const gcsError = error as GCSRateLimitError;
+              if (gcsError?.code === 429 && retries < MAX_RETRIES - 1) {
+                // Rate limit hit, wait and retry
+                console.log(
+                  `[GCS] Rate limit hit, waiting ${RETRY_DELAY}ms before retry ${retries + 1}/${MAX_RETRIES}...`,
+                );
+                await new Promise((resolve) =>
+                  setTimeout(resolve, RETRY_DELAY),
+                );
+                retries++;
+                continue;
+              }
+              throw error;
+            }
+          }
+        });
+
+        // Wait for all files in the batch to complete
+        await Promise.all(uploadPromises);
+
+        // Add a small delay between batches to avoid rate limits
+        if (i + BATCH_SIZE < files.length) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
         }
       }
 
@@ -379,9 +437,31 @@ export class GCSStorage implements StorageProvider {
       );
 
       const bucket = this.storageClient.bucket(this.bucketName);
-      await bucket.upload(filePath, { destination: gcsPath });
+      const MAX_RETRIES = 3;
+      const RETRY_DELAY = 1000;
+      let retries = 0;
 
-      console.log(`[GCS] Successfully uploaded file to ${gcsPath}`);
+      while (retries < MAX_RETRIES) {
+        try {
+          await bucket.upload(filePath, { destination: gcsPath });
+          console.log(`[GCS] Successfully uploaded file to ${gcsPath}`);
+          return;
+        } catch (error: unknown) {
+          const gcsError = error as GCSRateLimitError;
+          if (gcsError?.code === 429 && retries < MAX_RETRIES - 1) {
+            // Rate limit hit, wait and retry
+            console.log(
+              `[GCS] Rate limit hit, waiting ${RETRY_DELAY}ms before retry ${retries + 1}/${MAX_RETRIES}...`,
+            );
+            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+            retries++;
+            continue;
+          }
+          throw error;
+        }
+      }
+
+      throw new Error(`Failed to upload file after ${MAX_RETRIES} retries`);
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);

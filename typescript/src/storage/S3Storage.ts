@@ -1,37 +1,51 @@
 import { StorageProvider } from "./StorageProvider";
-import fs from "fs-extra";
-import path from "path";
-import os from "os";
 import {
   S3Client,
-  ListObjectsV2Command,
-  GetObjectCommand,
-  DeleteObjectsCommand,
   HeadBucketCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
   HeadObjectCommand,
-  CreateBucketCommand,
-  CreateBucketCommandInput,
-  BucketLocationConstraint,
-  S3ServiceException,
-  _Object as S3Object,
+  DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { Readable } from "stream";
-import util from "util";
-import stream from "stream";
+import fs from "fs-extra";
+import path from "path";
+import os from "os";
+import { promisify } from "util";
+import { pipeline } from "stream";
 
-export interface S3StorageOptions {
+const pipelineAsync = promisify(pipeline);
+
+/**
+ * Options for AWS S3 storage
+ */
+export interface S3Options {
+  /**
+   * AWS access key ID
+   */
   accessKeyId?: string;
+
+  /**
+   * AWS secret access key
+   */
   secretAccessKey?: string;
+
+  /**
+   * Optional prefix/folder path within the bucket
+   */
   prefix?: string;
 }
 
+/**
+ * AWS S3 storage provider implementation
+ */
 export class S3Storage implements StorageProvider {
-  private bucketName: string;
   private s3Client: S3Client;
+  private bucketName: string;
   private prefix?: string;
 
-  constructor(bucketName: string, region: string, options?: S3StorageOptions) {
+  constructor(bucketName: string, region: string, options?: S3Options) {
     this.bucketName = bucketName;
     this.prefix = options?.prefix;
 
@@ -47,41 +61,17 @@ export class S3Storage implements StorageProvider {
     this.s3Client = new S3Client(clientConfig);
   }
 
-  /**
-   * Ensures the bucket exists. If it does not, creates it.
-   */
   private async ensureBucketExists(): Promise<void> {
     try {
       await this.s3Client.send(
         new HeadBucketCommand({ Bucket: this.bucketName }),
       );
     } catch (error: unknown) {
-      // Check if error is from AWS SDK and has metadata
-      if (
-        error instanceof S3ServiceException &&
-        error.$metadata?.httpStatusCode === 404
-      ) {
-        const region =
-          typeof this.s3Client.config.region === "function"
-            ? await this.s3Client.config.region()
-            : this.s3Client.config.region;
-
-        const params: CreateBucketCommandInput = {
-          Bucket: this.bucketName,
-        };
-
-        // us-east-1 is the default region and doesn't accept a LocationConstraint
-        // For all other regions, we must explicitly specify the LocationConstraint
-        if (region !== "us-east-1") {
-          params.CreateBucketConfiguration = {
-            LocationConstraint: region as BucketLocationConstraint,
-          };
-        }
-
-        await this.s3Client.send(new CreateBucketCommand(params));
-      } else {
-        throw error;
-      }
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `S3 bucket "${this.bucketName}" does not exist or is not accessible: ${errorMessage}`,
+      );
     }
   }
 
@@ -115,12 +105,13 @@ export class S3Storage implements StorageProvider {
     const prefix = this.getSessionPrefix(userId, sessionId);
     const targetPath = this.getTempPath(userId, sessionId);
 
-    await this.ensureBucketExists();
-
     // Clear target directory if it exists
     await fs.emptyDir(targetPath);
 
     try {
+      // Ensure bucket exists before attempting download
+      await this.ensureBucketExists();
+
       // List all objects with the session prefix
       const listCommand = new ListObjectsV2Command({
         Bucket: this.bucketName,
@@ -193,8 +184,6 @@ export class S3Storage implements StorageProvider {
   ): Promise<void> {
     const prefix = this.getSessionPrefix(userId, sessionId);
 
-    await this.ensureBucketExists();
-
     try {
       // Read all files in the directory
       const files = await this.getAllFiles(filePath);
@@ -232,8 +221,6 @@ export class S3Storage implements StorageProvider {
    */
   async listSessions(userId: string): Promise<string[]> {
     const prefix = this.getUserPrefix(userId);
-
-    await this.ensureBucketExists();
 
     try {
       // List all objects with the user prefix and delimiter to get "directories"
@@ -291,8 +278,6 @@ export class S3Storage implements StorageProvider {
   async deleteSession(userId: string, sessionId: string): Promise<void> {
     const prefix = this.getSessionPrefix(userId, sessionId);
 
-    await this.ensureBucketExists();
-
     try {
       // List all objects with the session prefix
       const listCommand = new ListObjectsV2Command({
@@ -303,28 +288,21 @@ export class S3Storage implements StorageProvider {
       const listResponse = await this.s3Client.send(listCommand);
 
       if (!listResponse.Contents || listResponse.Contents.length === 0) {
-        return; // Nothing to delete
+        console.log(`No files found for session ${sessionId}`);
+        return;
       }
 
-      // Create array of objects to delete
-      const objectsToDelete = listResponse.Contents.filter(
-        (object: S3Object) => object.Key,
-      ) // Filter out objects without keys
-        .map((object: S3Object) => ({ Key: object.Key! }));
+      // Delete each object
+      for (const object of listResponse.Contents) {
+        if (!object.Key) continue;
 
-      if (objectsToDelete.length === 0) {
-        return; // Nothing to delete
+        const deleteCommand = new DeleteObjectCommand({
+          Bucket: this.bucketName,
+          Key: object.Key,
+        });
+
+        await this.s3Client.send(deleteCommand);
       }
-
-      // Delete objects
-      const deleteCommand = new DeleteObjectsCommand({
-        Bucket: this.bucketName,
-        Delete: {
-          Objects: objectsToDelete,
-        },
-      });
-
-      await this.s3Client.send(deleteCommand);
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -359,7 +337,7 @@ export class S3Storage implements StorageProvider {
   /**
    * Uploads a single file to S3
    * @param filePath - Path to the local file
-   * @param s3Key - S3 key (path) where the file will be stored
+   * @param s3Key - S3 key where the file will be stored
    * @returns Promise resolving when upload is complete
    */
   async uploadFile(filePath: string, s3Key: string): Promise<void> {
@@ -391,7 +369,7 @@ export class S3Storage implements StorageProvider {
 
   /**
    * Downloads a single file from S3
-   * @param s3Key - S3 key (path) of the file to download
+   * @param s3Key - S3 key of the file to download
    * @param localPath - Local path where to save the file
    * @returns Promise resolving to boolean indicating if file was downloaded
    */
@@ -435,8 +413,7 @@ export class S3Storage implements StorageProvider {
       // Write the file locally
       if (Body instanceof Readable) {
         const writeStream = fs.createWriteStream(localPath);
-        const pipeline = util.promisify(stream.pipeline);
-        await pipeline(Body as Readable, writeStream);
+        await pipelineAsync(Body, writeStream);
       } else if (Body instanceof Buffer || typeof Body === "string") {
         await fs.writeFile(localPath, Body);
       } else {

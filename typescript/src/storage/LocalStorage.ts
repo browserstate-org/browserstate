@@ -3,6 +3,16 @@ import fs from "fs-extra";
 import path from "path";
 import os from "os";
 
+/**
+ * Options for local file system storage
+ */
+export interface LocalStorageOptions {
+  /**
+   * Path where browser profiles will be stored
+   */
+  storagePath?: string;
+}
+
 export class LocalStorage implements StorageProvider {
   private basePath: string;
 
