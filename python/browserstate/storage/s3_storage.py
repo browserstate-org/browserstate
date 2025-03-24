@@ -2,6 +2,7 @@ import os
 import shutil
 import logging
 from typing import List, Optional
+import tempfile
 
 import boto3
 from botocore.exceptions import ClientError
@@ -14,12 +15,12 @@ class S3Storage(StorageProvider):
     """
     
     def __init__(self, bucket_name: str, 
-                 access_key_id: Optional[str] = None,
-                 secret_access_key: Optional[str] = None,
-                 region: Optional[str] = None,
-                 endpoint: Optional[str] = None):
+                access_key_id: Optional[str] = None,
+                secret_access_key: Optional[str] = None,
+                region: Optional[str] = None,
+                endpoint: Optional[str] = None):
         """
-        Initialize S3 storage provider.
+        Initialize S3 storage provider and ensure the S3 bucket exists.
         
         Args:
             bucket_name: S3 bucket name
@@ -29,7 +30,7 @@ class S3Storage(StorageProvider):
             endpoint: S3 endpoint URL (optional, for use with S3-compatible services)
         """
         self.bucket_name = bucket_name
-        
+
         # Configure S3 client
         s3_kwargs = {}
         if region:
@@ -39,21 +40,36 @@ class S3Storage(StorageProvider):
         if access_key_id and secret_access_key:
             s3_kwargs['aws_access_key_id'] = access_key_id
             s3_kwargs['aws_secret_access_key'] = secret_access_key
-            
+
         self.s3_client = boto3.client('s3', **s3_kwargs)
+
+        # Ensure the bucket exists; if it doesn't, create it.
+        try:
+            self.s3_client.head_bucket(Bucket=self.bucket_name)
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code in ('404', 'NoSuchBucket'):
+                create_bucket_kwargs = {'Bucket': self.bucket_name}
+                # For regions other than us-east-1, LocationConstraint is required.
+                if region and region != 'us-east-1':
+                    create_bucket_kwargs['CreateBucketConfiguration'] = {'LocationConstraint': region}
+                self.s3_client.create_bucket(**create_bucket_kwargs)
+            else:
+                raise
         
     def _get_temp_path(self, user_id: str, session_id: str) -> str:
         """
         Get a temporary path for a session.
-        
+
         Args:
             user_id: User identifier
             session_id: Session identifier
-            
+
         Returns:
             Full path to the temporary session directory
         """
-        temp_dir = os.path.join(os.path.expandvars("$TMPDIR") or "/tmp", "browserstate", user_id)
+        
+        temp_dir = os.path.join(tempfile.gettempdir(), "browserstate", user_id)
         os.makedirs(temp_dir, exist_ok=True)
         return os.path.join(temp_dir, session_id)
     

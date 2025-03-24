@@ -7,6 +7,7 @@ between runs using local storage.
 import time
 from browserstate import BrowserState, BrowserStateOptions
 from webdriver_manager.chrome import ChromeDriverManager
+import os
 
 def main():
     """Main function demonstrating BrowserState with Selenium"""
@@ -19,9 +20,22 @@ def main():
         print("Also make sure you have ChromeDriver installed and in your PATH")
         return
     
-    # Initialize BrowserState with local storage
+    # Uncomment to use S3 Storage
+    # s3_options = {
+    #     "bucket_name": "YOUR_BUCKET_NAME",
+    #     "region": "YOUR_AWS_REGION",
+    #     "access_key_id": "YOUR_AWS_ACCESS_KEY_ID",
+    #     "secret_access_key": "YOUR_AWS_SECRET_ACCESS_KEY"
+    # }
+
     user_id = "demo_user"
+    # Use local storage
     options = BrowserStateOptions(user_id=user_id)
+
+    # Uncomment to use S3 Storage option
+    #options = BrowserStateOptions(user_id=user_id, s3_options=s3_options)
+
+    # Initialize BrowserState
     browser_state = BrowserState(options)
     
     # List existing states
