@@ -110,16 +110,21 @@ const longRunningBrowserState = new BrowserState({
 // Use browser state
 async function example() {
   // Mount a session
-  await browserState.mount('session123');
+  // For cloud storage (S3/GCS): Downloads the session from storage (if it exists) or creates a new one
+  // For local storage: Uses the existing session or creates a new one
+  // Returns the path to the local directory containing the browser profile
+  // This path must be used when launching the browser
+  const userDataDir = await browserState.mount('session123');
 
   // Your browser automation code here...
 
   // Launch Chrome with the mounted profile and additional configurations
+  // userDataDir contains all the browser profile data (cookies, storage, etc.)
+  // This ensures the browser launches with the exact same state as last time
   console.log("Launching Chrome browser with additional configurations...");
   const chromeContext = await chromium.launchPersistentContext(userDataDir, {
     headless: false, // Launch in non-headless mode for visibility
     slowMo: 100, // Slow down operations for demo purposes
-    userDataDir: userDataDir, // Use the userDataDir from BrowserState
     // Additional configurations can be added here as needed
   });
 
