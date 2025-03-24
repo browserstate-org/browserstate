@@ -139,14 +139,11 @@ async function example() {
   await chromeContext.close();
 
   // Unmount and save the session
+  // This is crucial - it ensures all browser state changes are saved back to storage
+  // Without this, any changes made during automation would be lost
+  // For cloud storage (S3/GCS): This uploads all changes back to the cloud
+  // For local storage: Since files are already in the correct location, this just cleans up temporary files
   await browserState.unmount();
-
-  // List available sessions
-  const sessions = await browserState.listSessions();
-  console.log(sessions);
-
-  // Delete a session
-  await browserState.deleteSession('session123');
 }
 ```
 
