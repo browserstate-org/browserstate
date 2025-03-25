@@ -17,16 +17,16 @@ async function main() {
     userId: 'demo_user',
     storageType: 's3',
     s3Options: {
-      bucketName: 'your-s3-bucket-name',
-      region: 'us-west-2',  // Change to your region
-      accessKeyID: 'YOUR_ACCESS_KEY_ID',
-      secretAccessKey: 'YOUR_SECRET_ACCESS_KEY'
+      bucketName: 'my-sessions',
+      region: 'YOUR_AWS_REGION',  // Change to your region
+      accessKeyID: 'YOUR_AWS_ACCESS_KEY_ID',
+      secretAccessKey: 'YOUR_AWS_SECRET_ACCESS_KEY'
     }
   });
 
   // State ID to use
   const stateID = "s3-playwright-state";
-  
+
   try {
     // Mount the browser state
     console.log(`Mounting state ${stateID}...`);
@@ -40,7 +40,7 @@ async function main() {
 
     const page = await browser.newPage();
     await page.goto('https://example.com');
-    
+
     // Set some data in localStorage
     await page.evaluate(() => {
       localStorage.setItem('s3_test', JSON.stringify({
@@ -52,11 +52,11 @@ async function main() {
     // Read back the data
     const data = await page.evaluate(() => localStorage.getItem('s3_test'));
     console.log('Stored data:', data);
-    
+
     // Wait for user to interact or close automatically after delay
     console.log('Browser is open. Will close in 30 seconds...');
     await new Promise(resolve => setTimeout(resolve, 30000));
-    
+
     await browser.close();
 
     // Unmount the state to save changes
@@ -81,4 +81,4 @@ async function main() {
  * 8. Update this example with your credentials
  */
 
-main().catch(console.error); 
+main().catch(console.error);
