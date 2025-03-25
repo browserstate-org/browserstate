@@ -43,31 +43,35 @@ export class LocalStorage implements StorageProvider {
   async download(userId: string, sessionId: string): Promise<string> {
     const sessionPath = this.getSessionPath(userId, sessionId);
     const targetPath = this.getTempPath(userId, sessionId);
-    
+
     // Check if session exists
     if (await fs.pathExists(sessionPath)) {
       // Clear target directory if it already exists
       await fs.emptyDir(targetPath);
-      
+
       // Copy session data to temp directory
       await fs.copy(sessionPath, targetPath);
     } else {
       // Create an empty directory for new sessions
       await fs.ensureDir(targetPath);
     }
-    
+
     return targetPath;
   }
 
   /**
    * Uploads browser session files from temp to storage
    */
-  async upload(userId: string, sessionId: string, filePath: string): Promise<void> {
+  async upload(
+    userId: string,
+    sessionId: string,
+    filePath: string,
+  ): Promise<void> {
     const sessionPath = this.getSessionPath(userId, sessionId);
-    
+
     // Ensure session directory exists
     await fs.ensureDir(sessionPath);
-    
+
     // Copy files to storage
     await fs.copy(filePath, sessionPath, { overwrite: true });
   }
@@ -77,12 +81,12 @@ export class LocalStorage implements StorageProvider {
    */
   async listSessions(userId: string): Promise<string[]> {
     const userPath = this.getUserPath(userId);
-    
+
     try {
       const entries = await fs.readdir(userPath, { withFileTypes: true });
       return entries
-        .filter(entry => entry.isDirectory())
-        .map(entry => entry.name);
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name);
     } catch {
       // Directory does not exist, return empty array
       return [];
@@ -94,10 +98,9 @@ export class LocalStorage implements StorageProvider {
    */
   async deleteSession(userId: string, sessionId: string): Promise<void> {
     const sessionPath = this.getSessionPath(userId, sessionId);
-    
+
     if (await fs.pathExists(sessionPath)) {
       await fs.remove(sessionPath);
     }
   }
 }
-
