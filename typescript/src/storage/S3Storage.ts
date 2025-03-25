@@ -9,6 +9,9 @@ import {
   DeleteObjectsCommand,
   HeadBucketCommand,
   CreateBucketCommand,
+  CreateBucketCommandInput,
+  BucketLocationConstraint,
+  S3ServiceException,
   _Object as S3Object,
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
@@ -35,11 +38,9 @@ export class S3Storage implements StorageProvider {
 
     const clientConfig: Record<string, unknown> = { region };
 
-    // Support both accessKeyId and accessKeyID
-    const accessKeyId = options?.accessKeyId || (options as any)?.accessKeyID;
-    if (accessKeyId && options?.secretAccessKey) {
+    if (options?.accessKeyId && options?.secretAccessKey) {
       clientConfig.credentials = {
-        accessKeyId: accessKeyId,
+        accessKeyId: options.accessKeyId,
         secretAccessKey: options.secretAccessKey
       };
     }
@@ -53,15 +54,25 @@ export class S3Storage implements StorageProvider {
   private async ensureBucketExists(): Promise<void> {
     try {
       await this.s3Client.send(new HeadBucketCommand({ Bucket: this.bucketName }));
-    } catch (error: any) {
-      if (error.$metadata && error.$metadata.httpStatusCode === 404) {
+    } catch (error: unknown) {
+      // Check if error is from AWS SDK and has metadata
+      if (error instanceof S3ServiceException && error.$metadata?.httpStatusCode === 404) {
         const region = typeof this.s3Client.config.region === 'function'
           ? await this.s3Client.config.region()
           : this.s3Client.config.region;
-        const params: any = { Bucket: this.bucketName };
+        
+        const params: CreateBucketCommandInput = {
+          Bucket: this.bucketName
+        };
+        
+        // us-east-1 is the default region and doesn't accept a LocationConstraint
+        // For all other regions, we must explicitly specify the LocationConstraint
         if (region !== 'us-east-1') {
-          params.CreateBucketConfiguration = { LocationConstraint: region };
+          params.CreateBucketConfiguration = {
+            LocationConstraint: region as BucketLocationConstraint
+          };
         }
+        
         await this.s3Client.send(new CreateBucketCommand(params));
       } else {
         throw error;
