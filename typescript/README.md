@@ -1,52 +1,50 @@
-# BrowserState
+# 🌐 BrowserState
 
 BrowserState is a Node.js library for managing browser profiles across different storage providers, including local storage, AWS S3, and Google Cloud Storage.
 
 
-# Why BrowserState?
+# 🤔 Why BrowserState?
 Most browser automation workflows fail because authentication and session data don't persist reliably across environments. Manually handling cookies or re-authenticating slows everything down. Worse, many automations fail due to inconsistent browser fingerprints, machine IDs, and storage states—leading to bot detection and bans.
 
 BrowserState ensures your automation behaves like a real, returning user by providing:
 
-Full Browser Context Restoration – Save and restore cookies, local storage, IndexedDB, service worker caches, and extension data. Resume automation 
+🔄 Full Browser Context Restoration – Save and restore cookies, local storage, IndexedDB, service worker caches, and extension data. Resume automation 
 from the exact previous state.
 
-Multi-Instance Synchronization – Share browser profiles across multiple servers or devices, making automation scalable and resilient.
+🔗 Multi-Instance Synchronization – Share browser profiles across multiple servers or devices, making automation scalable and resilient.
 
-Zero-Setup Onboarding for Automation – Instantly deploy automation-ready browser profiles without manual setup.
+🚀 Zero-Setup Onboarding for Automation – Instantly deploy automation-ready browser profiles without manual setup.
 
-Efficient Resource Usage – Persistent browser usage without memory leaks, eliminating the need to launch new instances for every run.
+⚡️ Efficient Resource Usage – Persistent browser usage without memory leaks, eliminating the need to launch new instances for every run.
 
-Faster Debugging & Reproducibility – Store failing test cases exactly as they were, making it easy to diagnose automation failures.
+🔍 Faster Debugging & Reproducibility – Store failing test cases exactly as they were, making it easy to diagnose automation failures.
 
-Offline Execution & Caching – Automate tasks that rely on cached assets, such as scraping content behind paywalls or working in low-connectivity environments.
+💾 Offline Execution & Caching – Automate tasks that rely on cached assets, such as scraping content behind paywalls or working in low-connectivity environments.
 
-Cross-Device Synchronization – Seamlessly move between local development, cloud servers, and headless automation.
+🔄 Cross-Device Synchronization – Seamlessly move between local development, cloud servers, and headless automation.
 
-✅ Bot Detection Bypass
+## 🛡️ Bot Detection Bypass
 Many bot detection systems track inconsistencies in browser states—frequent changes to fingerprints, device identifiers, and storage behavior trigger red flags. Most people get detected because they unknowingly create a "new machine" every time.
 
 BrowserState solves this by preserving a stable, persistent browser identity across runs instead of resetting key markers. This drastically reduces detection risks while maintaining full automation control.
 
 Now you can move fast without breaking sessions—or getting flagged as a bot.
 
-## Implementation Status
+## 📊 Implementation Status
 
 | Storage Provider | Status |
 |------------------|--------|
 | Local Storage | ✅ Extensively tested |
-| S3 Storage | ⚠️ Implemented, needs additional testing |
+| S3 Storage | ✅ Tested and works, but requires more extensive testing in different environments |
 | GCS Storage | ✅ Tested and works, but requires more extensive testing in different environments |
 
-Currently, we recommend using the local storage provider for production use cases. Cloud storage providers are available but should be thoroughly tested in your environment before production use.
-
-## Installation
+## 📦 Installation
 
 ```bash
 npm install browserstate
 ```
 
-## Optional Dependencies
+## 🔧 Optional Dependencies
 
 BrowserState supports multiple storage backends. Depending on your needs, you may want to install additional dependencies:
 
@@ -60,7 +58,7 @@ BrowserState supports multiple storage backends. Depending on your needs, you ma
   npm install @google-cloud/storage
   ```
 
-## Usage
+## 💻 Usage
 
 ```typescript
 import { BrowserState } from 'browserstate';
@@ -147,7 +145,7 @@ async function example() {
 }
 ```
 
-## API
+## 📚 API
 
 ### BrowserState
 
@@ -178,7 +176,7 @@ The main class for managing browser state.
 - `deleteSession(sessionId: string)`: Deletes a specific session
 - `cleanup()`: Manually clean up temporary files (useful when autoCleanup is disabled)
 
-## Automatic Cleanup
+## 🧹 Automatic Cleanup
 
 BrowserState creates temporary files on your local system when working with browser profiles. By default, these files are automatically cleaned up when:
 
@@ -208,12 +206,12 @@ await browserState.cleanup();
 
 This is useful in scenarios where you want more control over when cleanup occurs, such as in long-running server processes or when handling multiple browser states.
 
-## Issues and Feedback
+## 🐛 Issues and Feedback
 
 If you encounter any issues or have feedback about specific storage providers:
 
-1. Check the existing GitHub issues to see if your problem has been reported
-2. Create a new issue with:
+1. 🔍 Check the existing GitHub issues to see if your problem has been reported
+2. ✍️ Create a new issue with:
    - A clear description of the problem
    - Which storage provider you're using
    - Steps to reproduce the issue
@@ -221,6 +219,6 @@ If you encounter any issues or have feedback about specific storage providers:
 
 We especially welcome feedback and testing reports for the S3 and GCS storage providers.
 
-## License
+## 📄 License
 
 MIT
