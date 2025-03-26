@@ -130,19 +130,21 @@ export interface BrowserStateOptions {
    */
   syncOptions?: {
     /**
-     * Where to store metadata for sync calculations (default: "local")
+     * Whether to store metadata on the storage provider (default: false)
+     * When true, metadata is stored alongside the browser profile
+     * When false, metadata is stored locally
      */
-    metadataStorage?: "local" | "cloud";
+    storeMetadataOnProvider?: boolean;
 
     /**
      * How frequently to update metadata in seconds (default: 0 - update on every operation)
-     * Only applies when metadataStorage is set to "cloud"
+     * Only applies when storeMetadataOnProvider is true
      */
     metadataUpdateInterval?: number;
 
     /**
      * Path for storing local metadata files (default: "~/.browserstate-metadata")
-     * Only applies when metadataStorage is set to "local"
+     * Only applies when storeMetadataOnProvider is false
      */
     localMetadataPath?: string;
   };
@@ -160,7 +162,7 @@ export class BrowserState {
   private cleanupMode: "always" | "never" | "exit-only";
   private useSync: boolean;
   private metadataDir: string;
-  private metadataStorage: "local" | "cloud";
+  private storeMetadataOnProvider: boolean;
   private metadataUpdateInterval: number;
   private lastMetadataUpdate: Map<string, number> = new Map();
 
@@ -176,7 +178,8 @@ export class BrowserState {
     this.useSync = options.useSync === true;
 
     // Set efficient sync options
-    this.metadataStorage = options.syncOptions?.metadataStorage || "local";
+    this.storeMetadataOnProvider =
+      options.syncOptions?.storeMetadataOnProvider || false;
     this.metadataUpdateInterval =
       options.syncOptions?.metadataUpdateInterval || 0;
 
@@ -193,7 +196,7 @@ export class BrowserState {
       options.syncOptions?.localMetadataPath || defaultMetadataPath;
     this.metadataDir = path.join(this.metadataDir, this.userId);
 
-    if (this.useSync && this.metadataStorage === "local") {
+    if (this.useSync && !this.storeMetadataOnProvider) {
       fs.ensureDirSync(this.metadataDir);
     }
 
@@ -414,11 +417,6 @@ export class BrowserState {
         return targetPath;
       }
 
-      // Always check for cloud metadata first if using cloud storage
-      if (this.metadataStorage === "cloud") {
-        console.log(`[EfficientSync] Checking for cloud-stored metadata...`);
-      }
-
       // Load previous metadata if it exists
       const previousMetadata = await this.loadMetadata(sessionId);
 
@@ -434,33 +432,11 @@ export class BrowserState {
         `[EfficientSync] Previous metadata found with ${previousMetadata.size} files. Starting incremental download.`,
       );
 
-      // Get current metadata from cloud by downloading metadata file
-      const metadataKey = `${this.userId}/${sessionId}/.browserstate-metadata.json`;
-      const tempMetadataPath = path.join(
-        this.tempDir,
-        `${sessionId}-metadata.json`,
+      // Get current metadata from storage provider
+      const currentMetadata = await this.storageProvider.getMetadata(
+        this.userId,
+        sessionId,
       );
-
-      let currentMetadata = new Map<string, FileMetadata>();
-      if (this.storageProvider instanceof GCSStorage) {
-        const gcs = this.storageProvider as GCSStorage;
-        const exists = await gcs.downloadFile(metadataKey, tempMetadataPath);
-        if (exists) {
-          const metadataContent = await fs.readFile(tempMetadataPath, "utf8");
-          const metadataObj = JSON.parse(metadataContent);
-          currentMetadata = new Map(Object.entries(metadataObj));
-          await fs.remove(tempMetadataPath);
-        }
-      } else if (this.storageProvider instanceof S3Storage) {
-        const s3 = this.storageProvider as S3Storage;
-        const exists = await s3.downloadFile(metadataKey, tempMetadataPath);
-        if (exists) {
-          const metadataContent = await fs.readFile(tempMetadataPath, "utf8");
-          const metadataObj = JSON.parse(metadataContent);
-          currentMetadata = new Map(Object.entries(metadataObj));
-          await fs.remove(tempMetadataPath);
-        }
-      }
 
       // Calculate diffs
       const diffs = this.getFileDiffs(currentMetadata, previousMetadata);
@@ -486,15 +462,10 @@ export class BrowserState {
         await fs.ensureDir(path.dirname(localPath));
 
         // Download the file
-        let downloaded = false;
-        if (this.storageProvider instanceof S3Storage) {
-          const s3 = this.storageProvider as S3Storage;
-          downloaded = await s3.downloadFile(cloudPath, localPath);
-        } else if (this.storageProvider instanceof GCSStorage) {
-          const gcs = this.storageProvider as GCSStorage;
-          downloaded = await gcs.downloadFile(cloudPath, localPath);
-        }
-
+        const downloaded = await this.storageProvider.downloadFile(
+          cloudPath,
+          localPath,
+        );
         if (downloaded) {
           downloadedCount++;
           if (downloadedCount % 10 === 0 || downloadedCount === totalFiles) {
@@ -521,7 +492,7 @@ export class BrowserState {
       // Update metadata file for next time
       let shouldUpdateMetadata = true;
 
-      if (this.metadataStorage === "cloud" && this.metadataUpdateInterval > 0) {
+      if (this.storeMetadataOnProvider && this.metadataUpdateInterval > 0) {
         const lastUpdate = this.lastMetadataUpdate.get(sessionId) || 0;
         const now = Date.now();
         const timeSinceLastUpdate = now - lastUpdate;
@@ -659,7 +630,7 @@ export class BrowserState {
       // Determine if we should update the metadata based on the update interval
       let shouldUpdateMetadata = true;
 
-      if (this.metadataStorage === "cloud" && this.metadataUpdateInterval > 0) {
+      if (this.storeMetadataOnProvider && this.metadataUpdateInterval > 0) {
         const lastUpdate = this.lastMetadataUpdate.get(sessionId) || 0;
         const now = Date.now();
         const timeSinceLastUpdate = now - lastUpdate;
@@ -866,14 +837,13 @@ export class BrowserState {
   ): Promise<void> {
     const metadataObj = Object.fromEntries(metadata);
 
-    if (this.metadataStorage === "local") {
+    if (this.storeMetadataOnProvider) {
+      // Save to cloud storage
+      await this.saveCloudMetadata(sessionId, metadataObj);
+    } else {
       // Save to local file system
       const metadataPath = this.getMetadataFilePath(sessionId);
       await fs.writeJSON(metadataPath, metadataObj, { spaces: 2 });
-      return;
-    } else {
-      // Save to cloud storage
-      await this.saveCloudMetadata(sessionId, metadataObj);
     }
   }
 
@@ -885,7 +855,10 @@ export class BrowserState {
   private async loadMetadata(
     sessionId: string,
   ): Promise<Map<string, FileMetadata>> {
-    if (this.metadataStorage === "local") {
+    if (this.storeMetadataOnProvider) {
+      // Load from cloud storage
+      return await this.loadCloudMetadata(sessionId);
+    } else {
       // Load from local file system
       const metadataPath = this.getMetadataFilePath(sessionId);
 
@@ -903,9 +876,6 @@ export class BrowserState {
       }
 
       return new Map();
-    } else {
-      // Load from cloud storage
-      return await this.loadCloudMetadata(sessionId);
     }
   }
 

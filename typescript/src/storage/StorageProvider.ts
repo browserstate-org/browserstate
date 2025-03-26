@@ -1,3 +1,5 @@
+import { FileMetadata } from "../types";
+
 /**
  * Interface for browser state storage providers
  */
@@ -35,4 +37,31 @@ export interface StorageProvider {
    * @param sessionId - Session identifier
    */
   deleteSession(userId: string, sessionId: string): Promise<void>;
+
+  /**
+   * Downloads a single file from storage
+   */
+  downloadFile(s3Key: string, localPath: string): Promise<boolean>;
+
+  /**
+   * Uploads a single file to storage
+   */
+  uploadFile(filePath: string, s3Key: string): Promise<void>;
+
+  /**
+   * Gets metadata for a session
+   */
+  getMetadata(
+    userId: string,
+    sessionId: string,
+  ): Promise<Map<string, FileMetadata>>;
+
+  /**
+   * Saves metadata for a session
+   */
+  saveMetadata(
+    userId: string,
+    sessionId: string,
+    metadata: Map<string, FileMetadata>,
+  ): Promise<void>;
 }

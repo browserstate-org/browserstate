@@ -1,4 +1,5 @@
 import { StorageProvider } from "./StorageProvider";
+import { FileMetadata } from "../types";
 import {
   S3Client,
   HeadBucketCommand,
@@ -90,20 +91,16 @@ export class S3Storage implements StorageProvider {
   }
 
   /**
-   * Get a temporary path for a session
-   */
-  private getTempPath(userId: string, sessionId: string): string {
-    const tempDir = path.resolve(os.tmpdir(), "browserstate", userId);
-    fs.ensureDirSync(tempDir);
-    return path.resolve(tempDir, sessionId);
-  }
-
-  /**
    * Downloads a browser session to a local directory
    */
   async download(userId: string, sessionId: string): Promise<string> {
     const prefix = this.getSessionPrefix(userId, sessionId);
-    const targetPath = this.getTempPath(userId, sessionId);
+    const targetPath = path.join(
+      os.tmpdir(),
+      "browserstate",
+      userId,
+      sessionId,
+    );
 
     // Clear target directory if it exists
     await fs.emptyDir(targetPath);
@@ -312,66 +309,7 @@ export class S3Storage implements StorageProvider {
   }
 
   /**
-   * Recursively gets all files in a directory
-   */
-  private async getAllFiles(dirPath: string): Promise<string[]> {
-    const files: string[] = [];
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = path.join(dirPath, entry.name);
-
-      if (entry.isDirectory()) {
-        // Recursively get files from subdirectories
-        const subDirFiles = await this.getAllFiles(fullPath);
-        files.push(...subDirFiles);
-      } else {
-        // Add file path
-        files.push(fullPath);
-      }
-    }
-
-    return files;
-  }
-
-  /**
-   * Uploads a single file to S3
-   * @param filePath - Path to the local file
-   * @param s3Key - S3 key where the file will be stored
-   * @returns Promise resolving when upload is complete
-   */
-  async uploadFile(filePath: string, s3Key: string): Promise<void> {
-    try {
-      console.log(`[S3] Uploading single file to S3: ${filePath} -> ${s3Key}`);
-
-      // Read file content
-      const fileContent = await fs.readFile(filePath);
-
-      // Upload the file
-      const upload = new Upload({
-        client: this.s3Client,
-        params: {
-          Bucket: this.bucketName,
-          Key: s3Key,
-          Body: fileContent,
-        },
-      });
-
-      await upload.done();
-      console.log(`[S3] Successfully uploaded file to ${s3Key}`);
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error(`[S3] Error uploading file to S3: ${errorMessage}`);
-      throw new Error(`Failed to upload file to S3: ${errorMessage}`);
-    }
-  }
-
-  /**
-   * Downloads a single file from S3
-   * @param s3Key - S3 key of the file to download
-   * @param localPath - Local path where to save the file
-   * @returns Promise resolving to boolean indicating if file was downloaded
+   * Downloads a single file from storage
    */
   async downloadFile(s3Key: string, localPath: string): Promise<boolean> {
     try {
@@ -428,5 +366,166 @@ export class S3Storage implements StorageProvider {
       console.error(`[S3] Error downloading file from S3: ${errorMessage}`);
       return false;
     }
+  }
+
+  /**
+   * Uploads a single file to storage
+   */
+  async uploadFile(filePath: string, s3Key: string): Promise<void> {
+    try {
+      console.log(`[S3] Uploading single file to S3: ${filePath} -> ${s3Key}`);
+
+      // Read file content
+      const fileContent = await fs.readFile(filePath);
+
+      // Upload the file
+      const upload = new Upload({
+        client: this.s3Client,
+        params: {
+          Bucket: this.bucketName,
+          Key: s3Key,
+          Body: fileContent,
+        },
+      });
+
+      await upload.done();
+      console.log(`[S3] Successfully uploaded file to ${s3Key}`);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.error(`[S3] Error uploading file to S3: ${errorMessage}`);
+      throw new Error(`Failed to upload file to S3: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Gets metadata for a session
+   */
+  async getMetadata(
+    userId: string,
+    sessionId: string,
+  ): Promise<Map<string, FileMetadata>> {
+    const metadataKey = `${this.getSessionPrefix(userId, sessionId)}/.browserstate-metadata.json`;
+    const tempMetadataPath = path.join(
+      os.tmpdir(),
+      "browserstate",
+      `${sessionId}-metadata.json`,
+    );
+
+    try {
+      // Check if metadata file exists
+      try {
+        await this.s3Client.send(
+          new HeadObjectCommand({
+            Bucket: this.bucketName,
+            Key: metadataKey,
+          }),
+        );
+      } catch {
+        // Metadata file does not exist
+        return new Map();
+      }
+
+      // Download metadata file
+      const getCommand = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: metadataKey,
+      });
+
+      const response = await this.s3Client.send(getCommand);
+      const Body = response.Body;
+
+      if (!Body) {
+        return new Map();
+      }
+
+      // Write metadata to temp file
+      if (Body instanceof Readable) {
+        const writeStream = fs.createWriteStream(tempMetadataPath);
+        await pipelineAsync(Body, writeStream);
+      } else if (Body instanceof Buffer || typeof Body === "string") {
+        await fs.writeFile(tempMetadataPath, Body);
+      } else {
+        throw new Error(`Unexpected response type for S3 object Body`);
+      }
+
+      // Read and parse metadata
+      const metadataContent = await fs.readFile(tempMetadataPath, "utf8");
+      const metadataObj = JSON.parse(metadataContent);
+
+      // Clean up temp file
+      await fs.remove(tempMetadataPath);
+
+      return new Map(Object.entries(metadataObj));
+    } catch (error) {
+      console.error(`[S3] Error loading metadata from S3:`, error);
+      return new Map();
+    }
+  }
+
+  /**
+   * Saves metadata for a session
+   */
+  async saveMetadata(
+    userId: string,
+    sessionId: string,
+    metadata: Map<string, FileMetadata>,
+  ): Promise<void> {
+    const metadataKey = `${this.getSessionPrefix(userId, sessionId)}/.browserstate-metadata.json`;
+    const tempMetadataPath = path.join(
+      os.tmpdir(),
+      "browserstate",
+      `${sessionId}-metadata.json`,
+    );
+
+    try {
+      // Convert metadata to JSON
+      const metadataObj = Object.fromEntries(metadata);
+      const metadataContent = JSON.stringify(metadataObj);
+
+      // Write to temp file
+      await fs.writeFile(tempMetadataPath, metadataContent);
+
+      // Upload to S3
+      const upload = new Upload({
+        client: this.s3Client,
+        params: {
+          Bucket: this.bucketName,
+          Key: metadataKey,
+          Body: metadataContent,
+        },
+      });
+
+      await upload.done();
+
+      // Clean up temp file
+      await fs.remove(tempMetadataPath);
+    } catch (error) {
+      console.error(`[S3] Error saving metadata to S3:`, error);
+      throw new Error(`Failed to save metadata to S3: ${error}`);
+    }
+  }
+
+  /**
+   * Recursively gets all files in a directory
+   */
+  private async getAllFiles(dirPath: string): Promise<string[]> {
+    const files: string[] = [];
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+
+      if (entry.isDirectory()) {
+        // Recursively get files from subdirectories
+        const subDirFiles = await this.getAllFiles(fullPath);
+        files.push(...subDirFiles);
+      } else {
+        // Add file path
+        files.push(fullPath);
+      }
+    }
+
+    return files;
   }
 }
