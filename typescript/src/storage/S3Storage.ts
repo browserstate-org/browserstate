@@ -1,4 +1,4 @@
-import { StorageProvider } from "./StorageProvider";
+import { CloudStorageProvider } from "./CloudStorageProvider";
 import { FileMetadata } from "../types";
 import {
   S3Client,
@@ -15,6 +15,13 @@ import path from "path";
 import os from "os";
 import { promisify } from "util";
 import { pipeline } from "stream";
+import {
+  StorageProviderError,
+  AuthenticationError,
+  ConnectionError,
+  ResourceNotFoundError,
+  ErrorCodes,
+} from "../errors";
 
 const pipelineAsync = promisify(pipeline);
 
@@ -41,7 +48,7 @@ export interface S3Options {
 /**
  * AWS S3 storage provider implementation
  */
-export class S3Storage implements StorageProvider {
+export class S3Storage implements CloudStorageProvider {
   private s3Client: S3Client;
   private bucketName: string;
   private prefix?: string;
@@ -59,7 +66,21 @@ export class S3Storage implements StorageProvider {
       };
     }
 
-    this.s3Client = new S3Client(clientConfig);
+    try {
+      this.s3Client = new S3Client(clientConfig);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("credentials")) {
+        throw new AuthenticationError(
+          "Failed to authenticate with AWS S3. Please check your credentials.",
+          "s3",
+        );
+      }
+      throw new StorageProviderError(
+        `Failed to initialize S3 storage: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "s3",
+      );
+    }
   }
 
   private async ensureBucketExists(): Promise<void> {
@@ -67,11 +88,24 @@ export class S3Storage implements StorageProvider {
       await this.s3Client.send(
         new HeadBucketCommand({ Bucket: this.bucketName }),
       );
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `S3 bucket "${this.bucketName}" does not exist or is not accessible: ${errorMessage}`,
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes("credentials")) {
+          throw new AuthenticationError(
+            "Failed to authenticate with AWS S3. Please check your credentials.",
+            "s3",
+          );
+        }
+        if (error.message.includes("connect")) {
+          throw new ConnectionError(
+            "Failed to connect to AWS S3. Please check your network connection.",
+            "s3",
+          );
+        }
+      }
+      throw new ResourceNotFoundError(
+        `S3 bucket "${this.bucketName}" does not exist or is not accessible`,
+        "s3",
       );
     }
   }
@@ -161,13 +195,21 @@ export class S3Storage implements StorageProvider {
       }
 
       return targetPath;
-    } catch (error: unknown) {
-      // Ensure directory exists even if download fails
-      await fs.ensureDir(targetPath);
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error("Error downloading from S3:", errorMessage);
-      return targetPath;
+    } catch (error) {
+      if (error instanceof AuthenticationError) {
+        throw error;
+      }
+      if (error instanceof ConnectionError) {
+        throw error;
+      }
+      if (error instanceof ResourceNotFoundError) {
+        throw error;
+      }
+      throw new StorageProviderError(
+        `Failed to download session: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "s3",
+      );
     }
   }
 
@@ -205,11 +247,18 @@ export class S3Storage implements StorageProvider {
 
         await upload.done();
       }
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error("Error uploading to S3:", errorMessage);
-      throw new Error(`Failed to upload session to S3: ${errorMessage}`);
+    } catch (error) {
+      if (error instanceof AuthenticationError) {
+        throw error;
+      }
+      if (error instanceof ConnectionError) {
+        throw error;
+      }
+      throw new StorageProviderError(
+        `Failed to upload session: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "s3",
+      );
     }
   }
 
@@ -261,11 +310,18 @@ export class S3Storage implements StorageProvider {
       }
 
       return Array.from(sessions);
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error("Error listing sessions from S3:", errorMessage);
-      return [];
+    } catch (error) {
+      if (error instanceof AuthenticationError) {
+        throw error;
+      }
+      if (error instanceof ConnectionError) {
+        throw error;
+      }
+      throw new StorageProviderError(
+        `Failed to list sessions: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "s3",
+      );
     }
   }
 
@@ -285,7 +341,6 @@ export class S3Storage implements StorageProvider {
       const listResponse = await this.s3Client.send(listCommand);
 
       if (!listResponse.Contents || listResponse.Contents.length === 0) {
-        console.log(`No files found for session ${sessionId}`);
         return;
       }
 
@@ -300,209 +355,253 @@ export class S3Storage implements StorageProvider {
 
         await this.s3Client.send(deleteCommand);
       }
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error("Error deleting session from S3:", errorMessage);
-      throw new Error(`Failed to delete session from S3: ${errorMessage}`);
-    }
-  }
-
-  /**
-   * Downloads a single file from storage
-   */
-  async downloadFile(s3Key: string, localPath: string): Promise<boolean> {
-    try {
-      console.log(
-        `[S3] Downloading single file from S3: ${s3Key} -> ${localPath}`,
+    } catch (error) {
+      if (error instanceof AuthenticationError) {
+        throw error;
+      }
+      if (error instanceof ConnectionError) {
+        throw error;
+      }
+      throw new StorageProviderError(
+        `Failed to delete session: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "s3",
       );
-
-      // Ensure the directory exists
-      await fs.ensureDir(path.dirname(localPath));
-
-      // Check if the file exists in S3
-      try {
-        await this.s3Client.send(
-          new HeadObjectCommand({
-            Bucket: this.bucketName,
-            Key: s3Key,
-          }),
-        );
-      } catch {
-        // File does not exist
-        console.log(`[S3] File does not exist in S3: ${s3Key}`);
-        return false;
-      }
-
-      // Download the file
-      const getCommand = new GetObjectCommand({
-        Bucket: this.bucketName,
-        Key: s3Key,
-      });
-
-      const response = await this.s3Client.send(getCommand);
-      const Body = response.Body;
-
-      if (!Body) {
-        console.log(`[S3] Empty file or download failed: ${s3Key}`);
-        return false;
-      }
-
-      // Write the file locally
-      if (Body instanceof Readable) {
-        const writeStream = fs.createWriteStream(localPath);
-        await pipelineAsync(Body, writeStream);
-      } else if (Body instanceof Buffer || typeof Body === "string") {
-        await fs.writeFile(localPath, Body);
-      } else {
-        throw new Error(`Unexpected response type for S3 object Body`);
-      }
-
-      console.log(`[S3] Successfully downloaded file from ${s3Key}`);
-      return true;
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error(`[S3] Error downloading file from S3: ${errorMessage}`);
-      return false;
     }
   }
 
   /**
-   * Uploads a single file to storage
+   * Upload a single file to S3
    */
-  async uploadFile(filePath: string, s3Key: string): Promise<void> {
+  async uploadFile(localPath: string, cloudPath: string): Promise<void> {
     try {
-      console.log(`[S3] Uploading single file to S3: ${filePath} -> ${s3Key}`);
-
-      // Read file content
-      const fileContent = await fs.readFile(filePath);
-
-      // Upload the file
       const upload = new Upload({
         client: this.s3Client,
         params: {
           Bucket: this.bucketName,
-          Key: s3Key,
-          Body: fileContent,
+          Key: cloudPath,
+          Body: fs.createReadStream(localPath),
         },
       });
 
       await upload.done();
-      console.log(`[S3] Successfully uploaded file to ${s3Key}`);
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error(`[S3] Error uploading file to S3: ${errorMessage}`);
-      throw new Error(`Failed to upload file to S3: ${errorMessage}`);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes("credentials")) {
+          throw new AuthenticationError(
+            "Failed to authenticate with AWS S3. Please check your credentials.",
+            "s3",
+          );
+        }
+        if (error.message.includes("connect")) {
+          throw new ConnectionError(
+            "Failed to connect to AWS S3. Please check your network connection.",
+            "s3",
+          );
+        }
+      }
+      throw new StorageProviderError(
+        `Failed to upload file: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "s3",
+      );
     }
   }
 
   /**
-   * Gets metadata for a session
+   * Download a single file from S3
+   */
+  async downloadFile(cloudPath: string, localPath: string): Promise<boolean> {
+    try {
+      const command = new HeadObjectCommand({
+        Bucket: this.bucketName,
+        Key: cloudPath,
+      });
+
+      try {
+        await this.s3Client.send(command);
+      } catch (error) {
+        if (error instanceof Error && error.name === "NotFound") {
+          return false;
+        }
+        throw error;
+      }
+
+      const getCommand = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: cloudPath,
+      });
+
+      const response = await this.s3Client.send(getCommand);
+      if (!response.Body) {
+        return false;
+      }
+
+      await fs.ensureDir(path.dirname(localPath));
+      await pipelineAsync(
+        response.Body as Readable,
+        fs.createWriteStream(localPath),
+      );
+      return true;
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes("credentials")) {
+          throw new AuthenticationError(
+            "Failed to authenticate with AWS S3. Please check your credentials.",
+            "s3",
+          );
+        }
+        if (error.message.includes("connect")) {
+          throw new ConnectionError(
+            "Failed to connect to AWS S3. Please check your network connection.",
+            "s3",
+          );
+        }
+      }
+      throw new StorageProviderError(
+        `Failed to download file: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "s3",
+      );
+    }
+  }
+
+  /**
+   * Delete a single file from S3
+   */
+  async deleteFile(cloudPath: string): Promise<void> {
+    try {
+      const command = new DeleteObjectCommand({
+        Bucket: this.bucketName,
+        Key: cloudPath,
+      });
+
+      await this.s3Client.send(command);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes("credentials")) {
+          throw new AuthenticationError(
+            "Failed to authenticate with AWS S3. Please check your credentials.",
+            "s3",
+          );
+        }
+        if (error.message.includes("connect")) {
+          throw new ConnectionError(
+            "Failed to connect to AWS S3. Please check your network connection.",
+            "s3",
+          );
+        }
+      }
+      throw new StorageProviderError(
+        `Failed to delete file: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "s3",
+      );
+    }
+  }
+
+  /**
+   * Get metadata for all files in a session
    */
   async getMetadata(
     userId: string,
     sessionId: string,
   ): Promise<Map<string, FileMetadata>> {
-    const metadataKey = `${this.getSessionPrefix(userId, sessionId)}/.browserstate-metadata.json`;
-    const tempMetadataPath = path.join(
-      os.tmpdir(),
-      "browserstate",
-      `${sessionId}-metadata.json`,
-    );
-
     try {
-      // Check if metadata file exists
-      try {
-        await this.s3Client.send(
-          new HeadObjectCommand({
-            Bucket: this.bucketName,
-            Key: metadataKey,
-          }),
-        );
-      } catch {
-        // Metadata file does not exist
-        return new Map();
-      }
-
-      // Download metadata file
-      const getCommand = new GetObjectCommand({
+      const prefix = this.getSessionPrefix(userId, sessionId);
+      const command = new ListObjectsV2Command({
         Bucket: this.bucketName,
-        Key: metadataKey,
+        Prefix: prefix,
       });
 
-      const response = await this.s3Client.send(getCommand);
-      const Body = response.Body;
-
-      if (!Body) {
+      const response = await this.s3Client.send(command);
+      if (!response.Contents) {
         return new Map();
       }
 
-      // Write metadata to temp file
-      if (Body instanceof Readable) {
-        const writeStream = fs.createWriteStream(tempMetadataPath);
-        await pipelineAsync(Body, writeStream);
-      } else if (Body instanceof Buffer || typeof Body === "string") {
-        await fs.writeFile(tempMetadataPath, Body);
-      } else {
-        throw new Error(`Unexpected response type for S3 object Body`);
+      const metadata = new Map<string, FileMetadata>();
+      for (const item of response.Contents) {
+        if (!item.Key) continue;
+
+        const relativePath = item.Key.slice(prefix.length + 1);
+        const headCommand = new HeadObjectCommand({
+          Bucket: this.bucketName,
+          Key: item.Key,
+        });
+
+        const headResponse = await this.s3Client.send(headCommand);
+        metadata.set(relativePath, {
+          path: relativePath,
+          hash: headResponse.ETag?.replace(/"/g, "") || "",
+          size: headResponse.ContentLength || 0,
+          modTime: headResponse.LastModified?.getTime() || Date.now(),
+        });
       }
 
-      // Read and parse metadata
-      const metadataContent = await fs.readFile(tempMetadataPath, "utf8");
-      const metadataObj = JSON.parse(metadataContent);
-
-      // Clean up temp file
-      await fs.remove(tempMetadataPath);
-
-      return new Map(Object.entries(metadataObj));
+      return metadata;
     } catch (error) {
-      console.error(`[S3] Error loading metadata from S3:`, error);
-      return new Map();
+      if (error instanceof Error) {
+        if (error.message.includes("credentials")) {
+          throw new AuthenticationError(
+            "Failed to authenticate with AWS S3. Please check your credentials.",
+            "s3",
+          );
+        }
+        if (error.message.includes("connect")) {
+          throw new ConnectionError(
+            "Failed to connect to AWS S3. Please check your network connection.",
+            "s3",
+          );
+        }
+      }
+      throw new StorageProviderError(
+        `Failed to get metadata: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "s3",
+      );
     }
   }
 
   /**
-   * Saves metadata for a session
+   * Save metadata for a session
    */
   async saveMetadata(
     userId: string,
     sessionId: string,
     metadata: Map<string, FileMetadata>,
   ): Promise<void> {
-    const metadataKey = `${this.getSessionPrefix(userId, sessionId)}/.browserstate-metadata.json`;
-    const tempMetadataPath = path.join(
-      os.tmpdir(),
-      "browserstate",
-      `${sessionId}-metadata.json`,
-    );
-
     try {
-      // Convert metadata to JSON
-      const metadataObj = Object.fromEntries(metadata);
-      const metadataContent = JSON.stringify(metadataObj);
+      const prefix = this.getSessionPrefix(userId, sessionId);
+      const metadataKey = `${prefix}/.browserstate-metadata.json`;
+      const tempPath = path.join(
+        os.tmpdir(),
+        "browserstate",
+        `${sessionId}-metadata.json`,
+      );
 
-      // Write to temp file
-      await fs.writeFile(tempMetadataPath, metadataContent);
-
-      // Upload to S3
-      const upload = new Upload({
-        client: this.s3Client,
-        params: {
-          Bucket: this.bucketName,
-          Key: metadataKey,
-          Body: metadataContent,
-        },
-      });
-
-      await upload.done();
-
-      // Clean up temp file
-      await fs.remove(tempMetadataPath);
+      await fs.writeJSON(tempPath, Object.fromEntries(metadata), { spaces: 2 });
+      await this.uploadFile(tempPath, metadataKey);
+      await fs.remove(tempPath);
     } catch (error) {
-      console.error(`[S3] Error saving metadata to S3:`, error);
-      throw new Error(`Failed to save metadata to S3: ${error}`);
+      if (error instanceof Error) {
+        if (error.message.includes("credentials")) {
+          throw new AuthenticationError(
+            "Failed to authenticate with AWS S3. Please check your credentials.",
+            "s3",
+          );
+        }
+        if (error.message.includes("connect")) {
+          throw new ConnectionError(
+            "Failed to connect to AWS S3. Please check your network connection.",
+            "s3",
+          );
+        }
+      }
+      throw new StorageProviderError(
+        `Failed to save metadata: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "s3",
+      );
     }
   }
 

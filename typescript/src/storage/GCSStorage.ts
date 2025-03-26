@@ -1,9 +1,16 @@
-import { StorageProvider } from "./StorageProvider";
+import { CloudStorageProvider } from "./CloudStorageProvider";
 import { FileMetadata } from "../types";
-import { Storage } from "@google-cloud/storage";
+import { Storage, Bucket, File } from "@google-cloud/storage";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
+import {
+  StorageProviderError,
+  AuthenticationError,
+  ConnectionError,
+  ErrorCodes,
+} from "../errors";
+import { ProgressTracker } from "../utils/ProgressTracker";
 
 /**
  * Options for Google Cloud Storage
@@ -13,20 +20,42 @@ export interface GCSOptions {
    * Optional prefix/folder path within the bucket
    */
   prefix?: string;
+  bucketName: string;
+  projectID: string;
+  keyFilename: string;
 }
 
 /**
  * Google Cloud Storage provider implementation
  */
-export class GCSStorage implements StorageProvider {
+export class GCSStorage implements CloudStorageProvider {
   private storage: Storage;
-  private bucketName: string;
+  private bucket: Bucket;
   private prefix?: string;
+  private progressTracker: ProgressTracker;
 
-  constructor(bucketName: string, options?: GCSOptions) {
-    this.bucketName = bucketName;
-    this.prefix = options?.prefix;
-    this.storage = new Storage();
+  constructor(options: GCSOptions) {
+    this.prefix = options.prefix;
+    this.progressTracker = ProgressTracker.getInstance();
+    try {
+      this.storage = new Storage({
+        projectId: options.projectID,
+        keyFilename: options.keyFilename,
+      });
+      this.bucket = this.storage.bucket(options.bucketName);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("credentials")) {
+        throw new AuthenticationError(
+          "Failed to authenticate with Google Cloud Storage. Please check your credentials.",
+          "gcs",
+        );
+      }
+      throw new StorageProviderError(
+        `Failed to initialize GCS storage: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "gcs",
+      );
+    }
   }
 
   /**
@@ -47,54 +76,92 @@ export class GCSStorage implements StorageProvider {
    * Downloads a browser session to a local directory
    */
   async download(userId: string, sessionId: string): Promise<string> {
-    const prefix = this.getSessionPrefix(userId, sessionId);
-    const targetPath = path.join(
-      os.tmpdir(),
-      "browserstate",
-      userId,
-      sessionId,
-    );
-
-    // Clear target directory if it exists
-    await fs.emptyDir(targetPath);
-
     try {
-      const bucket = this.storage.bucket(this.bucketName);
+      const sessionPrefix = this.getSessionPrefix(userId, sessionId);
+      const targetPath = path.join(
+        os.tmpdir(),
+        "browserstate",
+        userId,
+        sessionId,
+      );
 
-      // List all files with the session prefix
-      const [files] = await bucket.getFiles({ prefix });
+      // Clear target directory
+      await fs.rm(targetPath, { recursive: true, force: true });
+      await fs.mkdir(targetPath, { recursive: true });
 
-      if (files.length === 0) {
-        // Create an empty directory for new sessions
-        await fs.ensureDir(targetPath);
-        return targetPath;
-      }
+      // Get list of files and total size
+      const [files] = await this.bucket.getFiles({ prefix: sessionPrefix });
+      const totalBytes = await this.getTotalSize(files);
 
-      // Download each file
+      // Download each file with progress tracking
+      let downloadedBytes = 0;
+      this.progressTracker.startOperation({
+        type: "download",
+        fileName: sessionId,
+        totalBytes,
+      });
+
       for (const file of files) {
-        // Calculate relative path within the session
-        const relativePath = file.name.slice(prefix.length + 1);
-        if (!relativePath) continue; // Skip the directory itself
+        const relativePath = file.name.slice(sessionPrefix.length + 1);
+        const localPath = path.join(targetPath, relativePath);
+        await fs.mkdir(path.dirname(localPath), { recursive: true });
 
-        // Create the local file path
-        const localFilePath = path.join(targetPath, relativePath);
+        await new Promise<void>((resolve, reject) => {
+          const writeStream = fs.createWriteStream(localPath);
+          const readStream = file.createReadStream();
 
-        // Ensure the directory exists
-        await fs.ensureDir(path.dirname(localFilePath));
+          readStream.on("data", (chunk: Buffer) => {
+            downloadedBytes += chunk.length;
+            this.progressTracker.updateProgress(downloadedBytes);
+          });
 
-        // Download the file
-        await file.download({ destination: localFilePath });
+          writeStream.on("finish", resolve);
+          writeStream.on("error", reject);
+          readStream.on("error", reject);
+          readStream.pipe(writeStream);
+        });
       }
 
+      this.progressTracker.completeOperation();
       return targetPath;
-    } catch (error: unknown) {
-      // Ensure directory exists even if download fails
-      await fs.ensureDir(targetPath);
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error("Error downloading from GCS:", errorMessage);
-      return targetPath;
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes("credentials")) {
+          throw new AuthenticationError(
+            "Failed to authenticate with Google Cloud Storage. Please check your credentials.",
+            "gcs",
+          );
+        }
+        if (error.message.includes("connect")) {
+          throw new ConnectionError(
+            "Failed to connect to Google Cloud Storage. Please check your network connection.",
+            "gcs",
+          );
+        }
+      }
+      throw new StorageProviderError(
+        `Failed to download session: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "gcs",
+      );
     }
+  }
+
+  /**
+   * Get total size of files
+   */
+  private async getTotalSize(files: File[]): Promise<number> {
+    let totalSize = 0;
+    for (const file of files) {
+      const [metadata] = await file.getMetadata();
+      const size = metadata.size;
+      if (typeof size === "string") {
+        totalSize += parseInt(size, 10);
+      } else if (typeof size === "number") {
+        totalSize += size;
+      }
+    }
+    return totalSize;
   }
 
   /**
@@ -103,67 +170,146 @@ export class GCSStorage implements StorageProvider {
   async upload(
     userId: string,
     sessionId: string,
-    filePath: string,
+    sourcePath: string,
   ): Promise<void> {
-    const prefix = this.getSessionPrefix(userId, sessionId);
-
     try {
-      const bucket = this.storage.bucket(this.bucketName);
+      const sessionPrefix = this.getSessionPrefix(userId, sessionId);
 
-      // Read all files in the directory
-      const files = await this.getAllFiles(filePath);
+      // Get list of files and total size
+      const files = await this.getAllFiles(sourcePath);
+      const totalBytes = await this.getLocalTotalSize(
+        files.map((file) => path.join(sourcePath, file)),
+      );
 
-      // Upload each file
+      // Upload all files with progress tracking
+      let uploadedBytes = 0;
+      this.progressTracker.startOperation({
+        type: "upload",
+        fileName: sessionId,
+        totalBytes,
+      });
+
       for (const file of files) {
-        const relativePath = path.relative(filePath, file);
-        const gcsPath = `${prefix}/${relativePath}`;
+        const filePath = path.join(sourcePath, file);
+        const destination = `${sessionPrefix}/${file}`;
 
-        // Upload the file
-        await bucket.upload(file, {
-          destination: gcsPath,
+        await new Promise<void>((resolve, reject) => {
+          const writeStream = this.bucket.file(destination).createWriteStream();
+          const readStream = fs.createReadStream(filePath);
+
+          readStream.on("data", (chunk: string | Buffer) => {
+            uploadedBytes += Buffer.byteLength(chunk);
+            this.progressTracker.updateProgress(uploadedBytes);
+          });
+
+          writeStream.on("finish", resolve);
+          writeStream.on("error", reject);
+          readStream.on("error", reject);
+          readStream.pipe(writeStream);
         });
       }
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error("Error uploading to GCS:", errorMessage);
-      throw new Error(`Failed to upload session to GCS: ${errorMessage}`);
+
+      this.progressTracker.completeOperation();
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes("credentials")) {
+          throw new AuthenticationError(
+            "Failed to authenticate with Google Cloud Storage. Please check your credentials.",
+            "gcs",
+          );
+        }
+        if (error.message.includes("connect")) {
+          throw new ConnectionError(
+            "Failed to connect to Google Cloud Storage. Please check your network connection.",
+            "gcs",
+          );
+        }
+      }
+      throw new StorageProviderError(
+        `Failed to upload session: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "gcs",
+      );
     }
+  }
+
+  /**
+   * Get all files in a directory recursively
+   */
+  private async getAllFiles(dir: string): Promise<string[]> {
+    const files = await fs.readdir(dir, { withFileTypes: true });
+    const paths: string[] = [];
+
+    for (const file of files) {
+      const fullPath = path.join(dir, file.name);
+      if (file.isDirectory()) {
+        const subFiles = await this.getAllFiles(fullPath);
+        paths.push(
+          ...subFiles.map((f) => path.relative(dir, path.join(fullPath, f))),
+        );
+      } else {
+        paths.push(path.relative(dir, fullPath));
+      }
+    }
+
+    return paths;
+  }
+
+  /**
+   * Get total size of local files
+   */
+  private async getLocalTotalSize(files: string[]): Promise<number> {
+    let totalSize = 0;
+    for (const file of files) {
+      try {
+        const stats = await fs.stat(file);
+        totalSize += stats.size;
+      } catch (error) {
+        console.warn(
+          `Warning: Could not get size for file ${file}: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+      }
+    }
+    return totalSize;
   }
 
   /**
    * Lists all available sessions for a user
    */
   async listSessions(userId: string): Promise<string[]> {
-    const prefix = this.getUserPrefix(userId);
-
     try {
-      const bucket = this.storage.bucket(this.bucketName);
-
-      // List all files with the user prefix
-      const [files] = await bucket.getFiles({ prefix });
-
-      // Extract unique session IDs from file paths
+      const prefix = this.getUserPrefix(userId);
+      const [files] = await this.bucket.getFiles({ prefix });
       const sessions = new Set<string>();
 
       for (const file of files) {
-        // Skip if it's not under the user prefix
-        if (!file.name.startsWith(`${prefix}/`)) continue;
-
-        // Extract the next path component (session ID)
-        const remaining = file.name.slice(prefix.length + 1);
-        const sessionId = remaining.split("/")[0];
-        if (sessionId) {
-          sessions.add(sessionId);
+        const parts = file.name.split("/");
+        if (parts.length >= 2) {
+          sessions.add(parts[1]);
         }
       }
 
       return Array.from(sessions);
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error("Error listing sessions from GCS:", errorMessage);
-      return [];
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes("credentials")) {
+          throw new AuthenticationError(
+            "Failed to authenticate with Google Cloud Storage. Please check your credentials.",
+            "gcs",
+          );
+        }
+        if (error.message.includes("connect")) {
+          throw new ConnectionError(
+            "Failed to connect to Google Cloud Storage. Please check your network connection.",
+            "gcs",
+          );
+        }
+      }
+      throw new StorageProviderError(
+        `Failed to list sessions: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "gcs",
+      );
     }
   }
 
@@ -171,86 +317,132 @@ export class GCSStorage implements StorageProvider {
    * Deletes a session
    */
   async deleteSession(userId: string, sessionId: string): Promise<void> {
-    const prefix = this.getSessionPrefix(userId, sessionId);
-
     try {
-      const bucket = this.storage.bucket(this.bucketName);
+      const prefix = this.getSessionPrefix(userId, sessionId);
+      const [files] = await this.bucket.getFiles({ prefix });
 
-      // List all files with the session prefix
-      const [files] = await bucket.getFiles({ prefix });
-
-      if (files.length === 0) {
-        console.log(`No files found for session ${sessionId}`);
-        return;
-      }
-
-      // Delete each file
       await Promise.all(files.map((file) => file.delete()));
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error("Error deleting session from GCS:", errorMessage);
-      throw new Error(`Failed to delete session from GCS: ${errorMessage}`);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes("credentials")) {
+          throw new AuthenticationError(
+            "Failed to authenticate with Google Cloud Storage. Please check your credentials.",
+            "gcs",
+          );
+        }
+        if (error.message.includes("connect")) {
+          throw new ConnectionError(
+            "Failed to connect to Google Cloud Storage. Please check your network connection.",
+            "gcs",
+          );
+        }
+      }
+      throw new StorageProviderError(
+        `Failed to delete session: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "gcs",
+      );
     }
   }
 
   /**
    * Downloads a single file from storage
    */
-  async downloadFile(gcsPath: string, localPath: string): Promise<boolean> {
+  async downloadFile(cloudPath: string, localPath: string): Promise<boolean> {
     try {
-      console.log(
-        `[GCS] Downloading single file from GCS: ${gcsPath} -> ${localPath}`,
-      );
-
-      // Ensure the directory exists
-      await fs.ensureDir(path.dirname(localPath));
-
-      const bucket = this.storage.bucket(this.bucketName);
-      const file = bucket.file(gcsPath);
-
-      // Check if the file exists
+      const file = this.bucket.file(cloudPath);
       const [exists] = await file.exists();
+
       if (!exists) {
-        console.log(`[GCS] File does not exist in GCS: ${gcsPath}`);
         return false;
       }
 
-      // Download the file
+      await fs.mkdir(path.dirname(localPath), { recursive: true });
       await file.download({ destination: localPath });
-
-      console.log(`[GCS] Successfully downloaded file from ${gcsPath}`);
       return true;
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error(`[GCS] Error downloading file from GCS: ${errorMessage}`);
-      return false;
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes("credentials")) {
+          throw new AuthenticationError(
+            "Failed to authenticate with Google Cloud Storage. Please check your credentials.",
+            "gcs",
+          );
+        }
+        if (error.message.includes("connect")) {
+          throw new ConnectionError(
+            "Failed to connect to Google Cloud Storage. Please check your network connection.",
+            "gcs",
+          );
+        }
+      }
+      throw new StorageProviderError(
+        `Failed to download file: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "gcs",
+      );
     }
   }
 
   /**
    * Uploads a single file to storage
    */
-  async uploadFile(filePath: string, gcsPath: string): Promise<void> {
+  async uploadFile(filePath: string, cloudPath: string): Promise<void> {
     try {
-      console.log(
-        `[GCS] Uploading single file to GCS: ${filePath} -> ${gcsPath}`,
+      await this.bucket.upload(filePath, { destination: cloudPath });
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes("credentials")) {
+          throw new AuthenticationError(
+            "Failed to authenticate with Google Cloud Storage. Please check your credentials.",
+            "gcs",
+          );
+        }
+        if (error.message.includes("connect")) {
+          throw new ConnectionError(
+            "Failed to connect to Google Cloud Storage. Please check your network connection.",
+            "gcs",
+          );
+        }
+      }
+      throw new StorageProviderError(
+        `Failed to upload file: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "gcs",
       );
+    }
+  }
 
-      const bucket = this.storage.bucket(this.bucketName);
+  /**
+   * Delete a single file from storage
+   */
+  async deleteFile(cloudPath: string): Promise<void> {
+    try {
+      const file = this.bucket.file(cloudPath);
+      const [exists] = await file.exists();
 
-      // Upload the file
-      await bucket.upload(filePath, {
-        destination: gcsPath,
-      });
-
-      console.log(`[GCS] Successfully uploaded file to ${gcsPath}`);
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error(`[GCS] Error uploading file to GCS: ${errorMessage}`);
-      throw new Error(`Failed to upload file to GCS: ${errorMessage}`);
+      if (exists) {
+        await file.delete();
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes("credentials")) {
+          throw new AuthenticationError(
+            "Failed to authenticate with Google Cloud Storage. Please check your credentials.",
+            "gcs",
+          );
+        }
+        if (error.message.includes("connect")) {
+          throw new ConnectionError(
+            "Failed to connect to Google Cloud Storage. Please check your network connection.",
+            "gcs",
+          );
+        }
+      }
+      throw new StorageProviderError(
+        `Failed to delete file: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "gcs",
+      );
     }
   }
 
@@ -261,37 +453,49 @@ export class GCSStorage implements StorageProvider {
     userId: string,
     sessionId: string,
   ): Promise<Map<string, FileMetadata>> {
-    const metadataPath = `${this.getSessionPrefix(userId, sessionId)}/.browserstate-metadata.json`;
-    const tempMetadataPath = path.join(
-      os.tmpdir(),
-      "browserstate",
-      `${sessionId}-metadata.json`,
-    );
-
     try {
-      const bucket = this.storage.bucket(this.bucketName);
-      const file = bucket.file(metadataPath);
+      const prefix = this.getSessionPrefix(userId, sessionId);
+      const [files] = await this.bucket.getFiles({ prefix });
 
-      // Check if metadata file exists
-      const [exists] = await file.exists();
-      if (!exists) {
-        return new Map();
+      const metadata = new Map<string, FileMetadata>();
+      for (const file of files) {
+        const relativePath = file.name.slice(prefix.length + 1);
+        const [metadata2] = await file.getMetadata();
+
+        metadata.set(relativePath, {
+          path: relativePath,
+          hash: metadata2.md5Hash || "",
+          size:
+            typeof metadata2.size === "string"
+              ? parseInt(metadata2.size, 10)
+              : 0,
+          modTime: metadata2.updated
+            ? new Date(metadata2.updated).getTime()
+            : Date.now(),
+        });
       }
 
-      // Download metadata file
-      await file.download({ destination: tempMetadataPath });
-
-      // Read and parse metadata
-      const metadataContent = await fs.readFile(tempMetadataPath, "utf8");
-      const metadataObj = JSON.parse(metadataContent);
-
-      // Clean up temp file
-      await fs.remove(tempMetadataPath);
-
-      return new Map(Object.entries(metadataObj));
+      return metadata;
     } catch (error) {
-      console.error(`[GCS] Error loading metadata from GCS:`, error);
-      return new Map();
+      if (error instanceof Error) {
+        if (error.message.includes("credentials")) {
+          throw new AuthenticationError(
+            "Failed to authenticate with Google Cloud Storage. Please check your credentials.",
+            "gcs",
+          );
+        }
+        if (error.message.includes("connect")) {
+          throw new ConnectionError(
+            "Failed to connect to Google Cloud Storage. Please check your network connection.",
+            "gcs",
+          );
+        }
+      }
+      throw new StorageProviderError(
+        `Failed to get metadata: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "gcs",
+      );
     }
   }
 
@@ -303,56 +507,34 @@ export class GCSStorage implements StorageProvider {
     sessionId: string,
     metadata: Map<string, FileMetadata>,
   ): Promise<void> {
-    const metadataPath = `${this.getSessionPrefix(userId, sessionId)}/.browserstate-metadata.json`;
-    const tempMetadataPath = path.join(
-      os.tmpdir(),
-      "browserstate",
-      `${sessionId}-metadata.json`,
-    );
-
     try {
-      // Convert metadata to JSON
-      const metadataObj = Object.fromEntries(metadata);
-      const metadataContent = JSON.stringify(metadataObj);
-
-      // Write to temp file
-      await fs.writeFile(tempMetadataPath, metadataContent);
-
-      const bucket = this.storage.bucket(this.bucketName);
-
-      // Upload to GCS
-      await bucket.upload(tempMetadataPath, {
-        destination: metadataPath,
-      });
-
-      // Clean up temp file
-      await fs.remove(tempMetadataPath);
+      const prefix = this.getSessionPrefix(userId, sessionId);
+      const metadataFile = this.bucket.file(
+        `${prefix}/.browserstate-metadata.json`,
+      );
+      await metadataFile.save(
+        JSON.stringify(Object.fromEntries(metadata), null, 2),
+      );
     } catch (error) {
-      console.error(`[GCS] Error saving metadata to GCS:`, error);
-      throw new Error(`Failed to save metadata to GCS: ${error}`);
-    }
-  }
-
-  /**
-   * Recursively gets all files in a directory
-   */
-  private async getAllFiles(dirPath: string): Promise<string[]> {
-    const files: string[] = [];
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = path.join(dirPath, entry.name);
-
-      if (entry.isDirectory()) {
-        // Recursively get files from subdirectories
-        const subDirFiles = await this.getAllFiles(fullPath);
-        files.push(...subDirFiles);
-      } else {
-        // Add file path
-        files.push(fullPath);
+      if (error instanceof Error) {
+        if (error.message.includes("credentials")) {
+          throw new AuthenticationError(
+            "Failed to authenticate with Google Cloud Storage. Please check your credentials.",
+            "gcs",
+          );
+        }
+        if (error.message.includes("connect")) {
+          throw new ConnectionError(
+            "Failed to connect to Google Cloud Storage. Please check your network connection.",
+            "gcs",
+          );
+        }
       }
+      throw new StorageProviderError(
+        `Failed to save metadata: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ErrorCodes.UNKNOWN_ERROR,
+        "gcs",
+      );
     }
-
-    return files;
   }
 }

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser State Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .notes {
+            margin-top: 20px;
+        }
+        .note {
+            padding: 12px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            border-left: 4px solid #007bff;
+        }
+        .timestamp {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Browser State Test</h1>
+        <div class="input-group">
+            <input type="text" id="noteInput" placeholder="Enter a note...">
+            <button onclick="addNote()">Add Note</button>
+        </div>
+        <div id="notes" class="notes"></div>
+    </div>
+
+    <script>
+        // Load existing notes from localStorage
+        function loadNotes() {
+            const notes = JSON.parse(localStorage.getItem('notes') || '[]');
+            const notesContainer = document.getElementById('notes');
+            notesContainer.innerHTML = '';
+            
+            notes.forEach(note => {
+                const noteElement = document.createElement('div');
+                noteElement.className = 'note';
+                noteElement.innerHTML = `
+                    <div>${note.text}</div>
+                    <div class="timestamp">${new Date(note.timestamp).toLocaleString()}</div>
+                `;
+                notesContainer.appendChild(noteElement);
+            });
+        }
+
+        // Add a new note
+        function addNote() {
+            const input = document.getElementById('noteInput');
+            const text = input.value.trim();
+            
+            if (text) {
+                const notes = JSON.parse(localStorage.getItem('notes') || '[]');
+                notes.push({
+                    text,
+                    timestamp: Date.now()
+                });
+                
+                localStorage.setItem('notes', JSON.stringify(notes));
+                input.value = '';
+                loadNotes();
+            }
+        }
+
+        // Load notes when page loads
+        loadNotes();
+
+        // Add note when Enter is pressed
+        document.getElementById('noteInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                addNote();
+            }
+        });
+    </script>
+</body>
+</html> 
