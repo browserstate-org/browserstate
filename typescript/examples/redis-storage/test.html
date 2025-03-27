@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BrowserState Redis Storage Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #2563eb;
+      border-bottom: 2px solid #e5e7eb;
+      padding-bottom: 10px;
+    }
+    .container {
+      background-color: #f9fafb;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .input-group {
+      display: flex;
+      margin-bottom: 20px;
+      gap: 10px;
+    }
+    input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+    button {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: #1d4ed8;
+    }
+    ul {
+      padding-left: 20px;
+    }
+    li {
+      margin-bottom: 8px;
+    }
+    .storage-info {
+      margin-top: 30px;
+      padding: 15px;
+      background-color: #eff6ff;
+      border-radius: 4px;
+      border-left: 4px solid #2563eb;
+    }
+    .storage-count {
+      font-weight: bold;
+      color: #2563eb;
+    }
+  </style>
+</head>
+<body>
+  <h1>BrowserState Redis Storage Test</h1>
+  
+  <div class="container">
+    <h2>Add Notes</h2>
+    <p>Type a note below and click "Add Note" to store it in localStorage. This data will be persisted using Redis storage.</p>
+    
+    <div class="input-group">
+      <input type="text" id="noteInput" placeholder="Enter a note...">
+      <button id="addNote">Add Note</button>
+    </div>
+    
+    <h2>Your Notes</h2>
+    <ul id="notesList"></ul>
+    
+    <div class="storage-info">
+      <p>Currently storing <span id="storageCount" class="storage-count">0</span> notes in localStorage.</p>
+      <p>sessionID: <span id="sessionId">unknown</span></p>
+      <button id="clearNotes">Clear All Notes</button>
+    </div>
+  </div>
+
+  <script>
+    // Get elements
+    const noteInput = document.getElementById('noteInput');
+    const addNoteBtn = document.getElementById('addNote');
+    const notesList = document.getElementById('notesList');
+    const storageCount = document.getElementById('storageCount');
+    const clearNotesBtn = document.getElementById('clearNotes');
+    const sessionIdEl = document.getElementById('sessionId');
+    
+    // Get or set the session ID from URL or generate a new one
+    let sessionId = new URLSearchParams(window.location.search).get('session');
+    if (!sessionId) {
+      sessionId = 'redis-storage-' + Date.now();
+    }
+    sessionIdEl.textContent = sessionId;
+    
+    // Load notes from localStorage
+    function loadNotes() {
+      const notes = JSON.parse(localStorage.getItem('notes') || '[]');
+      notesList.innerHTML = '';
+      notes.forEach(note => {
+        const li = document.createElement('li');
+        li.textContent = note;
+        notesList.appendChild(li);
+      });
+      storageCount.textContent = notes.length;
+    }
+    
+    // Add a new note
+    addNoteBtn.addEventListener('click', () => {
+      const note = noteInput.value.trim();
+      if (note) {
+        const notes = JSON.parse(localStorage.getItem('notes') || '[]');
+        notes.push(note);
+        localStorage.setItem('notes', JSON.stringify(notes));
+        noteInput.value = '';
+        loadNotes();
+      }
+    });
+    
+    // Clear all notes
+    clearNotesBtn.addEventListener('click', () => {
+      localStorage.removeItem('notes');
+      loadNotes();
+    });
+    
+    // Enter key to add note
+    noteInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        addNoteBtn.click();
+      }
+    });
+    
+    // Initial load
+    loadNotes();
+  </script>
+</body>
+</html> 

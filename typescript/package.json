@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc",
     "test": "jest",
-    "lint": "eslint src",
+    "lint": "eslint ./src --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "prepare": "npm run build",
     "playwright": "npx playwright test",
@@ -20,7 +20,9 @@
     "release:patch": "npm version patch && npm publish",
     "release:minor": "npm version minor && npm publish",
     "release:major": "npm version major && npm publish",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "verify-storage": "ts-node verification-tests/run-all-tests.ts",
+    "verify-redis": "ts-node verification-tests/RedisStorageVerification.ts"
   },
   "repository": {
     "type": "git",

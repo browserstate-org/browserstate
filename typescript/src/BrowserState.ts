@@ -3,9 +3,9 @@ import { LocalStorage } from "./storage/LocalStorage";
 import { S3Storage } from "./storage/S3Storage";
 import { GCSStorage } from "./storage/GCSStorage";
 import {
-  RedisCacheProvider,
-  RedisCacheOptions,
-} from "./storage/RedisCacheProvider";
+  RedisStorageProvider,
+  RedisStorageOptions as RedisStorageConfigOptions,
+} from "./storage/RedisStorageProvider";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
@@ -76,13 +76,14 @@ export interface GCSOptions {
 }
 
 /**
- * Options for Redis caching
+ * Options for Redis storage
  */
-export interface RedisOptions extends RedisCacheOptions {
+export interface RedisStorageOptions extends RedisStorageConfigOptions {
   /**
-   * Whether to enable Redis caching
+   * Whether to throw an error on session not found (default: true)
+   * If false, a new session will be created instead
    */
-  enabled: boolean;
+  errorOnNotFound?: boolean;
 }
 
 /**
@@ -97,7 +98,7 @@ export interface BrowserStateOptions {
   /**
    * Type of storage backend to use (default: "local")
    */
-  storageType?: "local" | "s3" | "gcs";
+  storageType?: "local" | "s3" | "gcs" | "redis";
 
   /**
    * Options for local storage
@@ -115,24 +116,24 @@ export interface BrowserStateOptions {
   gcsOptions?: GCSOptions;
 
   /**
+   * Options for Redis storage
+   */
+  redisStorageOptions?: RedisStorageOptions;
+
+  /**
    * Whether to automatically clean up temporary files on process exit (default: true)
    */
   autoCleanup?: boolean;
-
-  /**
-   * Options for Redis caching
-   */
-  redisOptions?: RedisOptions;
 }
 
 /**
  * BrowserState main class for managing browser profiles across storage providers
  */
 export class BrowserState {
-  private userId: string;
   private storageProvider: StorageProvider;
-  private currentSession: string | undefined = undefined;
-  private sessionPath: string | undefined = undefined;
+  private userId: string;
+  private currentSession?: string;
+  private sessionPath?: string;
   private tempDir: string;
   private autoCleanup: boolean;
 
@@ -150,17 +151,13 @@ export class BrowserState {
     this.tempDir = path.join(os.tmpdir(), "browserstate", this.userId);
     fs.ensureDirSync(this.tempDir);
 
-    // Initialize storage provider based on type
-    let provider: StorageProvider;
+    // Create storage provider based on options
     switch (options.storageType) {
-      case "local":
-        provider = new LocalStorage(options.localOptions?.storagePath);
-        break;
       case "s3":
         if (!options.s3Options) {
           throw new Error("S3 options required when using s3 storage");
         }
-        provider = new S3Storage(
+        this.storageProvider = new S3Storage(
           options.s3Options.bucketName,
           options.s3Options.region,
           {
@@ -170,28 +167,33 @@ export class BrowserState {
           },
         );
         break;
+
       case "gcs":
         if (!options.gcsOptions) {
           throw new Error("GCS options required when using gcs storage");
         }
-        provider = new GCSStorage(options.gcsOptions.bucketName, {
+        this.storageProvider = new GCSStorage(options.gcsOptions.bucketName, {
           keyFilePath: options.gcsOptions.keyFilename,
           projectID: options.gcsOptions.projectID,
           prefix: options.gcsOptions.prefix,
         });
         break;
-      default:
-        throw new Error(`Unsupported storage type: ${options.storageType}`);
-    }
 
-    // Wrap with Redis cache if enabled and using cloud storage
-    if (options.redisOptions?.enabled && options.storageType !== "local") {
-      this.storageProvider = new RedisCacheProvider(
-        provider,
-        options.redisOptions,
-      );
-    } else {
-      this.storageProvider = provider;
+      case "redis":
+        if (!options.redisStorageOptions) {
+          throw new Error("Redis options required when using redis storage");
+        }
+        this.storageProvider = new RedisStorageProvider(
+          options.redisStorageOptions,
+        );
+        break;
+
+      case "local":
+      default:
+        this.storageProvider = new LocalStorage(
+          options.localOptions?.storagePath,
+        );
+        break;
     }
 
     // Register cleanup handler for auto cleanup if enabled
@@ -300,7 +302,7 @@ export class BrowserState {
    */
   async unmount(): Promise<void> {
     if (!this.currentSession || !this.sessionPath) {
-      return;
+      throw new Error("No session is currently mounted");
     }
 
     try {

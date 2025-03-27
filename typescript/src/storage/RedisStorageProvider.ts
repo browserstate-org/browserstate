@@ -3,6 +3,8 @@ import { StorageProvider } from "./StorageProvider";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
+import zlib from "zlib";
+import { promisify } from "util";
 
 export interface RedisStorageOptions {
   // Basic connection options
@@ -17,9 +19,10 @@ export interface RedisStorageOptions {
   tempDir?: string;
 
   // Advanced options
-  maxFileSize?: number; // Maximum file size to store in Redis (default: 1MB)
+  maxFileSize?: number; // Maximum file size to store in Redis (default: 5MB)
   compression?: boolean; // Whether to compress data before storing
   ttl?: number; // Time to live in seconds for sessions
+  silent?: boolean; // Suppress non-critical warning messages
 }
 
 /**
@@ -29,17 +32,17 @@ export interface RedisStorageOptions {
 export class RedisStorageProvider implements StorageProvider {
   private redis: Redis;
   private keyPrefix: string;
-  private tempDir: string;
   private maxFileSize: number;
   private compression: boolean;
   private ttl?: number;
+  private silent: boolean;
 
   constructor(options: RedisStorageOptions) {
     this.keyPrefix = options.keyPrefix || "browserstate:";
-    this.tempDir = options.tempDir || os.tmpdir();
-    this.maxFileSize = options.maxFileSize || 1024 * 1024; // 1MB default
+    this.maxFileSize = options.maxFileSize || 5 * 1024 * 1024; // 5MB default
     this.compression = options.compression || false;
     this.ttl = options.ttl;
+    this.silent = options.silent || false;
 
     // Configure Redis connection
     const redisOptions: RedisOptions = {
@@ -68,38 +71,65 @@ export class RedisStorageProvider implements StorageProvider {
   }
 
   async download(userId: string, sessionId: string): Promise<string> {
-    const sessionKey = this.getSessionKey(userId, sessionId);
-
-    // Get session data and files
-    const sessionData = await this.redis.get(sessionKey);
-    if (!sessionData) {
-      throw new Error(`Session ${sessionId} not found`);
-    }
-
-    // Parse session data
-    const sessionFiles = JSON.parse(sessionData);
-
-    // Create temporary directory for the session
-    const userDataDir = path.join(
-      this.tempDir,
+    const tempDirPath = path.join(
+      os.tmpdir(),
       `browserstate-${userId}-${sessionId}`,
     );
-    await fs.ensureDir(userDataDir);
+    await fs.ensureDir(tempDirPath);
 
-    // Extract and write files
-    for (const [filePath, fileData] of Object.entries(sessionFiles)) {
-      const fullPath = path.join(userDataDir, filePath);
-      await fs.ensureDir(path.dirname(fullPath));
+    try {
+      const sessionDataRedis = await this.redis.get(
+        `${this.keyPrefix}${userId}:${sessionId}`,
+      );
+      if (!sessionDataRedis) {
+        console.log(
+          `ℹ️ Session data not found in Redis for userId: ${userId}, sessionId: ${sessionId}. A new session will be created.`,
+        );
+        // Return the empty directory
+        return tempDirPath;
+      }
 
-      // Handle compressed data if needed
-      const content = this.compression
-        ? await this.decompressData(fileData as string)
-        : (fileData as string);
+      const sessionData = JSON.parse(sessionDataRedis);
+      const sessionFiles = sessionData.files || {};
 
-      await fs.writeFile(fullPath, content, "utf8");
+      for (const filePath in sessionFiles) {
+        const fileData = sessionFiles[filePath];
+        const fullPath = path.join(tempDirPath, filePath);
+        await fs.ensureDir(path.dirname(fullPath));
+
+        if (this.compression && typeof fileData === "string") {
+          // Handle compressed data (legacy format)
+          const decompressedData = await promisify(zlib.gunzip)(
+            Buffer.from(fileData, "base64"),
+          );
+          await fs.writeFile(fullPath, decompressedData);
+        } else if (typeof fileData === "object" && fileData !== null) {
+          // Handle new format with type information
+          if (fileData.type === "binary" && fileData.content) {
+            // Convert base64 string to buffer for binary files
+            await fs.writeFile(
+              fullPath,
+              Buffer.from(fileData.content, "base64"),
+            );
+          } else if (fileData.type === "text" && fileData.content) {
+            // Write text directly
+            await fs.writeFile(fullPath, fileData.content, "utf8");
+          } else if (!this.silent) {
+            console.warn(`Unknown file format for file: ${filePath}`);
+          }
+        } else if (typeof fileData === "string") {
+          // Legacy text content
+          await fs.writeFile(fullPath, fileData, "utf8");
+        } else if (!this.silent) {
+          console.warn(`Invalid data for file: ${filePath}`);
+        }
+      }
+
+      return tempDirPath;
+    } catch (error) {
+      console.error("Error downloading session from Redis:", error);
+      throw error;
     }
-
-    return userDataDir;
   }
 
   async upload(
@@ -107,71 +137,137 @@ export class RedisStorageProvider implements StorageProvider {
     sessionId: string,
     dirPath: string,
   ): Promise<void> {
-    if (!dirPath) {
-      throw new Error("Directory path is required");
+    try {
+      // Read all files in the directory
+      const sessionFiles = await this.readDirectory(dirPath);
+
+      // Prepare session data for Redis
+      const sessionData = {
+        userId,
+        sessionId,
+        files: sessionFiles,
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Store session data in Redis
+      await this.redis.set(
+        `${this.keyPrefix}${userId}:${sessionId}`,
+        JSON.stringify(sessionData),
+      );
+
+      if (this.ttl) {
+        await this.redis.expire(
+          `${this.keyPrefix}${userId}:${sessionId}`,
+          this.ttl,
+        );
+      }
+    } catch (error) {
+      console.error("Error uploading session to Redis:", error);
+      throw error;
     }
-
-    const sessionKey = this.getSessionKey(userId, sessionId);
-    const metadataKey = this.getMetadataKey(userId, sessionId);
-
-    // Read all files from the directory
-    const files: Record<string, string> = {};
-    const metadata: Record<string, { size: number; mtime: number }> = {};
-
-    await this.readDirectory(dirPath, "", files, metadata);
-
-    // Store in Redis with optional compression
-    const sessionData = this.compression
-      ? await this.compressData(JSON.stringify(files))
-      : JSON.stringify(files);
-
-    const pipeline = this.redis.pipeline();
-    pipeline.set(sessionKey, sessionData);
-    pipeline.set(metadataKey, JSON.stringify(metadata));
-
-    if (this.ttl) {
-      pipeline.expire(sessionKey, this.ttl);
-      pipeline.expire(metadataKey, this.ttl);
-    }
-
-    await pipeline.exec();
   }
 
-  private async readDirectory(
+  /**
+   * Read a directory recursively and convert files to appropriate format
+   */
+  async readDirectory(
     dirPath: string,
-    relativePath: string,
-    files: Record<string, string>,
-    metadata: Record<string, { size: number; mtime: number }>,
-  ): Promise<void> {
-    if (!dirPath) {
-      throw new Error("Directory path is required");
+    fileSet: Record<
+      string,
+      { type: "binary" | "text"; content: string; size: number; mtime: number }
+    > = {},
+    baseDir: string = dirPath,
+  ): Promise<
+    Record<
+      string,
+      { type: "binary" | "text"; content: string; size: number; mtime: number }
+    >
+  > {
+    try {
+      if (!(await fs.pathExists(dirPath))) {
+        return fileSet;
+      }
+
+      const files = await fs.readdir(dirPath);
+
+      for (const file of files) {
+        const fullPath = path.join(dirPath, file);
+        const stat = await fs.stat(fullPath);
+
+        if (stat.isDirectory()) {
+          await this.readDirectory(fullPath, fileSet, baseDir);
+        } else {
+          try {
+            // Skip files larger than maxFileSize
+            if (stat.size > this.maxFileSize) {
+              if (!this.silent) {
+                console.warn(
+                  `Skipping large file: ${fullPath} (${stat.size} bytes)`,
+                );
+              }
+              continue;
+            }
+
+            // Read file as buffer to determine if it's binary or text
+            const fileBuffer = await fs.readFile(fullPath);
+            const relativePath = path.relative(baseDir, fullPath);
+
+            // Check if file is binary
+            const isBinary = this.isBinaryFile(fileBuffer);
+
+            if (isBinary) {
+              // Store binary files as base64 with type information
+              fileSet[relativePath] = {
+                type: "binary",
+                content: fileBuffer.toString("base64"),
+                size: stat.size,
+                mtime: stat.mtime.getTime(),
+              };
+            } else {
+              // Store text files with type information
+              fileSet[relativePath] = {
+                type: "text",
+                content: fileBuffer.toString("utf8"),
+                size: stat.size,
+                mtime: stat.mtime.getTime(),
+              };
+            }
+          } catch (err) {
+            if (!this.silent) {
+              console.error(`Error reading file ${fullPath}:`, err);
+            }
+          }
+        }
+      }
+
+      return fileSet;
+    } catch (error) {
+      console.error(`Error reading directory ${dirPath}:`, error);
+      throw error;
+    }
+  }
+
+  // Helper method to determine if a file is binary
+  private isBinaryFile(buffer: Buffer): boolean {
+    // Check for null bytes or non-UTF8 content
+    // This is a simple heuristic and may need refinement
+
+    // First check: presence of null bytes often indicates binary
+    if (buffer.includes(0)) {
+      return true;
     }
 
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = path.join(dirPath, entry.name);
-      const relPath = path.join(relativePath, entry.name);
-
-      if (entry.isDirectory()) {
-        await this.readDirectory(fullPath, relPath, files, metadata);
-      } else {
-        const stats = await fs.stat(fullPath);
-
-        // Skip files larger than maxFileSize
-        if (stats.size > this.maxFileSize) {
-          console.warn(`Skipping large file: ${relPath} (${stats.size} bytes)`);
-          continue;
-        }
-
-        const content = await fs.readFile(fullPath, "utf8");
-
-        files[relPath] = content;
-        metadata[relPath] = {
-          size: stats.size,
-          mtime: stats.mtimeMs,
-        };
-      }
+    // Second check: try to decode as UTF-8 and see if it fails
+    try {
+      const decoded = buffer.toString("utf8");
+      // Check if decoding changed length significantly (sign of binary data)
+      // Also check for replacement character which indicates invalid UTF-8
+      return (
+        decoded.includes("") || buffer.length !== Buffer.from(decoded).length
+      );
+    } catch {
+      // If decoding fails, it's definitely binary
+      return true;
     }
   }
 
@@ -196,16 +292,5 @@ export class RedisStorageProvider implements StorageProvider {
       this.redis.del(sessionKey),
       this.redis.del(metadataKey),
     ]);
-  }
-
-  // Helper methods for compression
-  private async compressData(data: string): Promise<string> {
-    // TODO: Implement compression (e.g., using zlib)
-    return data;
-  }
-
-  private async decompressData(data: string): Promise<string> {
-    // TODO: Implement decompression (e.g., using zlib)
-    return data;
   }
 }

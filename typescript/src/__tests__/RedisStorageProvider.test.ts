@@ -32,6 +32,7 @@ jest.mock("fs-extra", () => ({
   stat: jest.fn(),
   remove: jest.fn(),
   mkdtempSync: jest.fn(),
+  pathExists: jest.fn(),
 }));
 
 // Type assertions for fs-extra mocks
@@ -43,6 +44,7 @@ const fsMocks = {
   stat: fs.stat as unknown as jest.Mock,
   remove: fs.remove as unknown as jest.Mock,
   mkdtempSync: fs.mkdtempSync as unknown as jest.Mock,
+  pathExists: fs.pathExists as unknown as jest.Mock,
 };
 
 describe("RedisStorageProvider", () => {
@@ -92,8 +94,20 @@ describe("RedisStorageProvider", () => {
   describe("download", () => {
     it("should download session data from Redis and create files", async () => {
       const mockSessionData = JSON.stringify({
-        "file1.txt": "content1",
-        "dir/file2.txt": "content2",
+        files: {
+          "file1.txt": {
+            type: "text",
+            content: "content1",
+            size: 8,
+            mtime: 123456789,
+          },
+          "dir/file2.txt": {
+            type: "text",
+            content: "content2",
+            size: 8,
+            mtime: 123456789,
+          },
+        },
       });
 
       mockRedis.get.mockResolvedValue(mockSessionData);
@@ -111,12 +125,23 @@ describe("RedisStorageProvider", () => {
       expect(fsMocks.writeFile).toHaveBeenCalledTimes(2);
     });
 
-    it("should throw error if session not found", async () => {
+    it("should return an empty directory if session not found", async () => {
       mockRedis.get.mockResolvedValue(null);
+      fsMocks.ensureDir.mockResolvedValue(undefined);
 
-      await expect(
-        provider.download("test-user", "test-session"),
-      ).rejects.toThrow(`Session test-session not found`);
+      const result = await provider.download(
+        "test-user",
+        "non-existent-session",
+      );
+
+      expect(result).toBe(
+        path.join(os.tmpdir(), `browserstate-test-user-non-existent-session`),
+      );
+      expect(fsMocks.ensureDir).toHaveBeenCalledWith(
+        path.join(os.tmpdir(), `browserstate-test-user-non-existent-session`),
+      );
+      // No files should be written
+      expect(fsMocks.writeFile).not.toHaveBeenCalled();
     });
   });
 
