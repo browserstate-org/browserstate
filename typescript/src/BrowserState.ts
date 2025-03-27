@@ -2,6 +2,10 @@ import { StorageProvider } from "./storage/StorageProvider";
 import { LocalStorage } from "./storage/LocalStorage";
 import { S3Storage } from "./storage/S3Storage";
 import { GCSStorage } from "./storage/GCSStorage";
+import {
+  RedisStorageProvider,
+  RedisStorageOptions as RedisStorageConfigOptions,
+} from "./storage/RedisStorageProvider";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
@@ -72,6 +76,17 @@ export interface GCSOptions {
 }
 
 /**
+ * Options for Redis storage
+ */
+export interface RedisStorageOptions extends RedisStorageConfigOptions {
+  /**
+   * Whether to throw an error on session not found (default: true)
+   * If false, a new session will be created instead
+   */
+  errorOnNotFound?: boolean;
+}
+
+/**
  * Configuration options for BrowserState
  */
 export interface BrowserStateOptions {
@@ -83,7 +98,7 @@ export interface BrowserStateOptions {
   /**
    * Type of storage backend to use (default: "local")
    */
-  storageType?: "local" | "s3" | "gcs";
+  storageType?: "local" | "s3" | "gcs" | "redis";
 
   /**
    * Options for local storage
@@ -99,6 +114,11 @@ export interface BrowserStateOptions {
    * Options for Google Cloud Storage
    */
   gcsOptions?: GCSOptions;
+
+  /**
+   * Options for Redis storage
+   */
+  redisStorageOptions?: RedisStorageOptions;
 
   /**
    * Whether to automatically clean up temporary files on process exit (default: true)
@@ -157,6 +177,15 @@ export class BrowserState {
           projectID: options.gcsOptions.projectID,
           prefix: options.gcsOptions.prefix,
         });
+        break;
+
+      case "redis":
+        if (!options.redisStorageOptions) {
+          throw new Error("Redis options required when using redis storage");
+        }
+        this.storageProvider = new RedisStorageProvider(
+          options.redisStorageOptions,
+        );
         break;
 
       case "local":

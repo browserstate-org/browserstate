@@ -1,0 +1,15 @@
+{
+  "timestamp": "2025-03-27T21:22:32.212Z",
+  "totalTests": 1,
+  "passedTests": 1,
+  "failedTests": 0,
+  "tests": [
+    {
+      "name": "redis-file-persistence",
+      "success": true,
+      "mountTime": 7,
+      "unmountTime": 18,
+      "remountTime": 36
+    }
+  ]
+}
