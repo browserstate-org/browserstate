@@ -15,14 +15,25 @@ const GCS_KEY_FILENAME = path.join(__dirname, 'service-account.json');
 
 // Redis configuration
 const REDIS_CONFIG = {
+  // Basic connection options
   host: 'localhost',
   port: 6379,
   password: undefined, // Add if using password
   db: 0,
   tls: false,
+  
+  // Cache configuration
   keyPrefix: 'browserstate:',
-  ttl: 3600, // 1 hour
-  enabled: true
+  ttl: 172800, // 48 hours (default)
+  maxSize: 100, // Maximum number of sessions to cache
+  
+  // Advanced options
+  cacheStrategy: 'lru' as const, // LRU eviction strategy (default)
+  validateOnRead: true, // Validate cached paths (default)
+  backgroundSync: false, // Sync in background
+  
+  // Required by BrowserState
+  enabled: true // Enable Redis caching
 };
 
 async function run() {

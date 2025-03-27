@@ -4,8 +4,10 @@ A TypeScript SDK for managing browser state storage with cloud storage and Redis
 
 ## Features
 
-- Cloud storage integration (Google Cloud Storage)
-- Redis caching layer with configurable strategies
+- Cloud storage integration (Google Cloud Storage, AWS S3)
+- Redis caching layer with LRU and FIFO eviction strategies
+- Path validation for cached data
+- Configurable TTL and cache size limits
 - Progress tracking for uploads and downloads
 - Background cache synchronization
 - Type-safe API
@@ -262,12 +264,50 @@ interface GCSOptions {
 ### Redis Cache Provider Options
 
 ```typescript
-interface RedisOptions {
-  host: string;             // Redis host
-  port: number;             // Redis port
-  password?: string;        // Optional password
-  db?: number;             // Optional database number
+interface RedisCacheOptions {
+  // Basic connection options
+  host: string;
+  port: number;
+  password?: string;
+  db?: number;
+  tls?: boolean | { rejectUnauthorized: boolean };
+
+  // Cache configuration
+  keyPrefix?: string;    // Default: "browserstate:"
+  ttl?: number;          // Time to live in seconds (default: 172800 - 48 hours)
+  maxSize?: number;      // Maximum number of sessions to cache (default: 100)
+  maxMemory?: string;    // Maximum memory usage (e.g., '2gb')
+
+  // Advanced options
+  compression?: boolean;           // Whether to compress data before caching
+  cacheStrategy?: "lru" | "fifo";  // Cache eviction strategy (default: "lru")
+  validateOnRead?: boolean;        // Whether to validate cached paths on read (default: true)
+  backgroundSync?: boolean;        // Whether to sync in background (default: false)
 }
+```
+
+## Cache Eviction Strategies
+
+The SDK provides two cache eviction strategies:
+
+### LRU (Least Recently Used) - Default
+- Tracks access time of each session
+- Evicts the least recently accessed session when cache is full
+- Best for scenarios where some sessions are accessed more frequently than others
+
+### FIFO (First In, First Out)
+- Evicts the oldest sessions first, regardless of access patterns
+- Simpler implementation, less overhead
+- Good for scenarios where all sessions have similar access patterns
+
+The eviction strategy can be configured:
+
+```typescript
+const cacheProvider = new RedisCacheProvider({
+  host: 'localhost',
+  port: 6379,
+  cacheStrategy: 'lru' // or 'fifo'
+});
 ```
 
 ## Error Handling

@@ -38,6 +38,10 @@ Now you can move fast without breaking sessions—or getting flagged as a bot.
   - ✅ Local storage (extensively tested)
   - ⚠️ AWS S3 (needs additional testing)
   - ✅ Google Cloud Storage (tested and works, but requires more extensive testing)
+- Redis caching layer for improved performance:
+  - ✅ LRU and FIFO cache eviction strategies
+  - ✅ Configurable TTL and cache size
+  - ✅ Automatic cache invalidation
 - Language support:
   - TypeScript/JavaScript
   - Python
@@ -50,6 +54,7 @@ Now you can move fast without breaking sessions—or getting flagged as a bot.
 | Local Storage | ✅ Tested | ✅ Implemented |
 | S3 Storage | ⚠️ Implemented | ⚠️ Implemented |
 | GCS Storage | ✅ Tested and works, but requires more extensive testing | ⚠️ Implemented |
+| Redis Cache | ✅ Implemented with LRU/FIFO strategies | ❌ Not implemented |
 | Browser Compatibility | Chrome, Firefox, Edge | Chrome, Firefox, Edge |
 
 ## Usage
@@ -69,6 +74,7 @@ This repository contains implementations for multiple languages. The core functi
 browserstate/
 ├── typescript/         # TypeScript implementation
 ├── python/             # Python implementation
+├── design-docs/        # Design documentation
 └── README.md           # This file
 ```
 
