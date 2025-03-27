@@ -18,6 +18,7 @@ jest.mock("ioredis", () => {
     del: jest.fn(),
     keys: jest.fn(),
     exec: jest.fn(),
+    expire: jest.fn(),
   }));
 
   return { Redis };
@@ -64,6 +65,9 @@ describe("RedisStorageProvider", () => {
   };
 
   beforeEach(() => {
+    // Clear all mocks
+    jest.clearAllMocks();
+    
     // Create mock Redis instance
     mockRedis = new Redis() as jest.Mocked<Redis>;
     mockPipeline = {

@@ -78,14 +78,14 @@ export class RedisStorageProvider implements StorageProvider {
     await fs.ensureDir(tempDirPath);
 
     try {
-      const sessionDataRedis = await this.redis.get(
-        `${this.keyPrefix}${userId}:${sessionId}`,
-      );
+      const sessionKey = this.getSessionKey(userId, sessionId);
+      const sessionDataRedis = await this.redis.get(sessionKey);
+      
       if (!sessionDataRedis) {
         console.log(
           `ℹ️ Session data not found in Redis for userId: ${userId}, sessionId: ${sessionId}. A new session will be created.`,
         );
-        // Return the empty directory
+        // Return the empty directory without attempting to write any files
         return tempDirPath;
       }
 
@@ -138,6 +138,11 @@ export class RedisStorageProvider implements StorageProvider {
     dirPath: string,
   ): Promise<void> {
     try {
+      // Validate directory path
+      if (!dirPath) {
+        throw new Error("Directory path is required");
+      }
+
       // Read all files in the directory
       const sessionFiles = await this.readDirectory(dirPath);
 
@@ -149,18 +154,29 @@ export class RedisStorageProvider implements StorageProvider {
         updatedAt: new Date().toISOString(),
       };
 
+      // Create a Redis pipeline for more efficient operations
+      const pipeline = this.redis.pipeline();
+      
       // Store session data in Redis
-      await this.redis.set(
-        `${this.keyPrefix}${userId}:${sessionId}`,
-        JSON.stringify(sessionData),
-      );
+      const sessionKey = this.getSessionKey(userId, sessionId);
+      pipeline.set(sessionKey, JSON.stringify(sessionData));
+      
+      // Store metadata for faster access
+      const metadataKey = this.getMetadataKey(userId, sessionId);
+      pipeline.set(metadataKey, JSON.stringify({
+        userId,
+        sessionId,
+        updatedAt: sessionData.updatedAt
+      }));
 
+      // Set TTL if configured
       if (this.ttl) {
-        await this.redis.expire(
-          `${this.keyPrefix}${userId}:${sessionId}`,
-          this.ttl,
-        );
+        pipeline.expire(sessionKey, this.ttl);
+        pipeline.expire(metadataKey, this.ttl);
       }
+
+      // Execute all commands in the pipeline
+      await pipeline.exec();
     } catch (error) {
       console.error("Error uploading session to Redis:", error);
       throw error;
