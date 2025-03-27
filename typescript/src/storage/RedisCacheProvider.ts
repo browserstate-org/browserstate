@@ -41,7 +41,7 @@ export class RedisCacheProvider implements CacheProvider {
   constructor(storageProvider: StorageProvider, options: RedisCacheOptions) {
     this.storageProvider = storageProvider;
     this.keyPrefix = options.keyPrefix || "browserstate:";
-    this.ttl = options.ttl || 3600; // Default 1 hour
+    this.ttl = options.ttl || 172800; // Default 48 hours
     this.maxSize = options.maxSize || 100; // Default 100 sessions
     this.cacheStrategy = options.cacheStrategy || "lru";
     this.validateOnRead = options.validateOnRead ?? true;
@@ -75,10 +75,6 @@ export class RedisCacheProvider implements CacheProvider {
     return `${this.keyPrefix}metadata:${sessionId}`;
   }
 
-  private getAccessKey(sessionId: string): string {
-    return `${this.keyPrefix}access:${sessionId}`;
-  }
-
   async download(sessionId: string): Promise<string | null> {
     const sessionKey = this.getSessionKey(sessionId);
     const metadataKey = this.getMetadataKey(sessionId);
@@ -96,8 +92,12 @@ export class RedisCacheProvider implements CacheProvider {
     // Validate cached data if enabled
     if (this.validateOnRead) {
       try {
-        const { filePath } = JSON.parse(metadata);
-        if (!(await fs.pathExists(filePath))) {
+        const metadataObj = JSON.parse(metadata);
+        // Only validate filePath if it exists in metadata
+        if (
+          metadataObj.filePath &&
+          !(await fs.pathExists(metadataObj.filePath))
+        ) {
           await this.invalidateCache(sessionId);
           return null;
         }
@@ -154,7 +154,10 @@ export class RedisCacheProvider implements CacheProvider {
 
   async listSessions(): Promise<string[]> {
     const keys = await this.redis.keys(`${this.keyPrefix}session:*`);
-    return keys.map((key) => key.replace(`${this.keyPrefix}session:`, ""));
+    return keys.map((key) => {
+      // Extract only the session ID part by removing both prefixes
+      return key.replace(`${this.keyPrefix}session:`, "");
+    });
   }
 
   private async evictOldestSession(): Promise<void> {
@@ -170,7 +173,7 @@ export class RedisCacheProvider implements CacheProvider {
     } else {
       // FIFO strategy - delete oldest by creation time
       const sessions = await this.listSessions();
-      if (sessions.length > 0) {
+      if (sessions && sessions.length > 0) {
         await this.deleteSession(sessions[0]);
       }
     }

@@ -85,7 +85,10 @@ describe("RedisCacheProvider", () => {
     it("should return null if validation fails", async () => {
       mockRedis.get.mockResolvedValueOnce(testData);
       mockRedis.get.mockResolvedValueOnce(
-        JSON.stringify({ timestamp: Date.now() }),
+        JSON.stringify({
+          timestamp: Date.now(),
+          filePath: "/some/path/file.txt",
+        }),
       );
       (fs.pathExists as jest.Mock).mockResolvedValueOnce(false);
 
@@ -136,7 +139,7 @@ describe("RedisCacheProvider", () => {
 
   describe("listSessions", () => {
     it("should return list of cached sessions", async () => {
-      const mockKeys = ["session:1", "session:2"];
+      const mockKeys = ["browserstate:session:1", "browserstate:session:2"];
       mockRedis.keys.mockResolvedValueOnce(mockKeys);
 
       const result = await provider.listSessions();
@@ -174,7 +177,12 @@ describe("RedisCacheProvider", () => {
     });
 
     it("should evict first session on FIFO", async () => {
+      // Set cache strategy to FIFO
+      (provider as unknown as { cacheStrategy: string }).cacheStrategy = "fifo";
+
+      // Mock listSessions to return a valid array
       mockRedis.keys.mockResolvedValueOnce(["session:first"]);
+
       await (
         provider as unknown as { evictOldestSession: () => Promise<void> }
       ).evictOldestSession();

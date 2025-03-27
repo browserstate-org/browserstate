@@ -23,6 +23,28 @@ jest.mock("ioredis", () => {
   return { Redis };
 });
 
+// Mock fs-extra
+jest.mock("fs-extra", () => ({
+  ensureDir: jest.fn(),
+  writeFile: jest.fn(),
+  readFile: jest.fn(),
+  readdir: jest.fn(),
+  stat: jest.fn(),
+  remove: jest.fn(),
+  mkdtempSync: jest.fn(),
+}));
+
+// Type assertions for fs-extra mocks
+const fsMocks = {
+  ensureDir: fs.ensureDir as unknown as jest.Mock,
+  writeFile: fs.writeFile as unknown as jest.Mock,
+  readFile: fs.readFile as unknown as jest.Mock,
+  readdir: fs.readdir as unknown as jest.Mock,
+  stat: fs.stat as unknown as jest.Mock,
+  remove: fs.remove as unknown as jest.Mock,
+  mkdtempSync: fs.mkdtempSync as unknown as jest.Mock,
+};
+
 describe("RedisStorageProvider", () => {
   let provider: RedisStorageProvider;
   let mockRedis: jest.Mocked<Redis>;
@@ -41,16 +63,7 @@ describe("RedisStorageProvider", () => {
 
   beforeEach(() => {
     // Create mock Redis instance
-    mockRedis = {
-      pipeline: jest.fn(),
-      set: jest.fn(),
-      get: jest.fn(),
-      del: jest.fn(),
-      keys: jest.fn(),
-      exec: jest.fn(),
-    } as unknown as jest.Mocked<Redis>;
-
-    // Create mock pipeline
+    mockRedis = new Redis() as jest.Mocked<Redis>;
     mockPipeline = {
       set: jest.fn().mockReturnThis(),
       expire: jest.fn().mockReturnThis(),
@@ -61,11 +74,14 @@ describe("RedisStorageProvider", () => {
     // Setup pipeline mock
     mockRedis.pipeline.mockReturnValue(mockPipeline);
 
-    // Create provider instance
+    // Create provider instance with mock Redis
     provider = new RedisStorageProvider(mockOptions);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (provider as any).redis = mockRedis;
 
     // Create temp directory for tests
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "redis-storage-test-"));
+    tempDir = path.join(os.tmpdir(), "redis-storage-test");
+    fsMocks.mkdtempSync.mockReturnValue(tempDir);
   });
 
   afterEach(async () => {
@@ -81,18 +97,18 @@ describe("RedisStorageProvider", () => {
       });
 
       mockRedis.get.mockResolvedValue(mockSessionData);
-      (fs.ensureDir as unknown as jest.Mock).mockResolvedValue(undefined);
-      (fs.writeFile as unknown as jest.Mock).mockResolvedValue(undefined);
+      fsMocks.ensureDir.mockResolvedValue(undefined);
+      fsMocks.writeFile.mockResolvedValue(undefined);
 
       const result = await provider.download("test-user", "test-session");
 
       expect(result).toBe(
         path.join(os.tmpdir(), `browserstate-test-user-test-session`),
       );
-      expect(fs.ensureDir).toHaveBeenCalledWith(
+      expect(fsMocks.ensureDir).toHaveBeenCalledWith(
         path.join(os.tmpdir(), `browserstate-test-user-test-session`),
       );
-      expect(fs.writeFile).toHaveBeenCalledTimes(2);
+      expect(fsMocks.writeFile).toHaveBeenCalledTimes(2);
     });
 
     it("should throw error if session not found", async () => {
@@ -108,8 +124,14 @@ describe("RedisStorageProvider", () => {
     it("should upload session data to Redis with proper pipeline operations", async () => {
       const userId = "test-user";
       const sessionId = "test-session";
-      const testFile = path.join(tempDir, "test.txt");
-      await fs.writeFile(testFile, "test content");
+
+      // Mock fs operations
+      fsMocks.writeFile.mockResolvedValue(undefined);
+      fsMocks.readdir.mockResolvedValue([
+        { name: "test.txt", isDirectory: () => false },
+      ]);
+      fsMocks.stat.mockResolvedValue({ size: 100, mtimeMs: Date.now() });
+      fsMocks.readFile.mockResolvedValue("test content");
 
       // Mock pipeline exec to resolve successfully
       mockPipeline.exec.mockResolvedValue([
@@ -132,6 +154,9 @@ describe("RedisStorageProvider", () => {
       const userId = "test-user";
       const sessionId = "test-session";
 
+      // Mock fs operations for empty directory
+      fsMocks.readdir.mockResolvedValue([]);
+
       // Mock pipeline exec to resolve successfully
       mockPipeline.exec.mockResolvedValue([
         [null, "OK"],
@@ -152,8 +177,15 @@ describe("RedisStorageProvider", () => {
     it("should skip files larger than maxFileSize", async () => {
       const userId = "test-user";
       const sessionId = "test-session";
-      const largeFile = path.join(tempDir, "large.txt");
-      await fs.writeFile(largeFile, "x".repeat(2 * 1024 * 1024)); // 2MB file
+
+      // Mock fs operations
+      fsMocks.readdir.mockResolvedValue([
+        { name: "large.txt", isDirectory: () => false },
+      ]);
+      fsMocks.stat.mockResolvedValue({
+        size: 2 * 1024 * 1024,
+        mtimeMs: Date.now(),
+      });
 
       // Mock pipeline exec to resolve successfully
       mockPipeline.exec.mockResolvedValue([
@@ -203,7 +235,7 @@ describe("RedisStorageProvider", () => {
       const userId = "test-user";
       const sessionId = "test-session";
 
-      mockRedis.del.mockResolvedValue(2);
+      mockRedis.del.mockResolvedValue(1);
 
       await provider.deleteSession(userId, sessionId);
 
