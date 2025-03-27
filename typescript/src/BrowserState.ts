@@ -2,6 +2,10 @@ import { StorageProvider } from "./storage/StorageProvider";
 import { LocalStorage } from "./storage/LocalStorage";
 import { S3Storage } from "./storage/S3Storage";
 import { GCSStorage } from "./storage/GCSStorage";
+import {
+  RedisCacheProvider,
+  RedisCacheOptions,
+} from "./storage/RedisCacheProvider";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
@@ -72,6 +76,16 @@ export interface GCSOptions {
 }
 
 /**
+ * Options for Redis caching
+ */
+export interface RedisOptions extends RedisCacheOptions {
+  /**
+   * Whether to enable Redis caching
+   */
+  enabled: boolean;
+}
+
+/**
  * Configuration options for BrowserState
  */
 export interface BrowserStateOptions {
@@ -104,16 +118,21 @@ export interface BrowserStateOptions {
    * Whether to automatically clean up temporary files on process exit (default: true)
    */
   autoCleanup?: boolean;
+
+  /**
+   * Options for Redis caching
+   */
+  redisOptions?: RedisOptions;
 }
 
 /**
  * BrowserState main class for managing browser profiles across storage providers
  */
 export class BrowserState {
-  private storageProvider: StorageProvider;
   private userId: string;
-  private currentSession?: string;
-  private sessionPath?: string;
+  private storageProvider: StorageProvider;
+  private currentSession: string | undefined = undefined;
+  private sessionPath: string | undefined = undefined;
   private tempDir: string;
   private autoCleanup: boolean;
 
@@ -131,13 +150,17 @@ export class BrowserState {
     this.tempDir = path.join(os.tmpdir(), "browserstate", this.userId);
     fs.ensureDirSync(this.tempDir);
 
-    // Create storage provider based on options
+    // Initialize storage provider based on type
+    let provider: StorageProvider;
     switch (options.storageType) {
+      case "local":
+        provider = new LocalStorage(options.localOptions?.storagePath);
+        break;
       case "s3":
         if (!options.s3Options) {
           throw new Error("S3 options required when using s3 storage");
         }
-        this.storageProvider = new S3Storage(
+        provider = new S3Storage(
           options.s3Options.bucketName,
           options.s3Options.region,
           {
@@ -147,24 +170,28 @@ export class BrowserState {
           },
         );
         break;
-
       case "gcs":
         if (!options.gcsOptions) {
           throw new Error("GCS options required when using gcs storage");
         }
-        this.storageProvider = new GCSStorage(options.gcsOptions.bucketName, {
+        provider = new GCSStorage(options.gcsOptions.bucketName, {
           keyFilePath: options.gcsOptions.keyFilename,
           projectID: options.gcsOptions.projectID,
           prefix: options.gcsOptions.prefix,
         });
         break;
-
-      case "local":
       default:
-        this.storageProvider = new LocalStorage(
-          options.localOptions?.storagePath,
-        );
-        break;
+        throw new Error(`Unsupported storage type: ${options.storageType}`);
+    }
+
+    // Wrap with Redis cache if enabled and using cloud storage
+    if (options.redisOptions?.enabled && options.storageType !== "local") {
+      this.storageProvider = new RedisCacheProvider(
+        provider,
+        options.redisOptions,
+      );
+    } else {
+      this.storageProvider = provider;
     }
 
     // Register cleanup handler for auto cleanup if enabled
@@ -273,7 +300,7 @@ export class BrowserState {
    */
   async unmount(): Promise<void> {
     if (!this.currentSession || !this.sessionPath) {
-      throw new Error("No session is currently mounted");
+      return;
     }
 
     try {

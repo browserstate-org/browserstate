@@ -1,224 +1,304 @@
-# 🌐 BrowserState
+# Browser State Storage SDK
 
-BrowserState is a Node.js library for managing browser profiles across different storage providers, including local storage, AWS S3, and Google Cloud Storage.
+A TypeScript SDK for managing browser state storage with cloud storage and Redis caching support.
 
+## Features
 
-# 🤔 Why BrowserState?
-Most browser automation workflows fail because authentication and session data don't persist reliably across environments. Manually handling cookies or re-authenticating slows everything down. Worse, many automations fail due to inconsistent browser fingerprints, machine IDs, and storage states—leading to bot detection and bans.
+- Cloud storage integration (Google Cloud Storage)
+- Redis caching layer with configurable strategies
+- Progress tracking for uploads and downloads
+- Background cache synchronization
+- Type-safe API
+- Extensible provider architecture
+- Comprehensive test coverage
 
-BrowserState ensures your automation behaves like a real, returning user by providing:
-
-🔄 Full Browser Context Restoration – Save and restore cookies, local storage, IndexedDB, service worker caches, and extension data. Resume automation 
-from the exact previous state.
-
-🔗 Multi-Instance Synchronization – Share browser profiles across multiple servers or devices, making automation scalable and resilient.
-
-🚀 Zero-Setup Onboarding for Automation – Instantly deploy automation-ready browser profiles without manual setup.
-
-⚡️ Efficient Resource Usage – Persistent browser usage without memory leaks, eliminating the need to launch new instances for every run.
-
-🔍 Faster Debugging & Reproducibility – Store failing test cases exactly as they were, making it easy to diagnose automation failures.
-
-💾 Offline Execution & Caching – Automate tasks that rely on cached assets, such as scraping content behind paywalls or working in low-connectivity environments.
-
-🔄 Cross-Device Synchronization – Seamlessly move between local development, cloud servers, and headless automation.
-
-## 🛡️ Bot Detection Bypass
-Many bot detection systems track inconsistencies in browser states—frequent changes to fingerprints, device identifiers, and storage behavior trigger red flags. Most people get detected because they unknowingly create a "new machine" every time.
-
-BrowserState solves this by preserving a stable, persistent browser identity across runs instead of resetting key markers. This drastically reduces detection risks while maintaining full automation control.
-
-Now you can move fast without breaking sessions—or getting flagged as a bot.
-
-## 📊 Implementation Status
-
-| Storage Provider | Status |
-|------------------|--------|
-| Local Storage | ✅ Extensively tested |
-| S3 Storage | ✅ Tested and works, but requires more extensive testing in different environments |
-| GCS Storage | ✅ Tested and works, but requires more extensive testing in different environments |
-
-## 📦 Installation
+## Installation
 
 ```bash
-npm install browserstate
+npm install browser-state-storage
 ```
 
-## 🔧 Optional Dependencies
+## Development Setup
 
-BrowserState supports multiple storage backends. Depending on your needs, you may want to install additional dependencies:
+```bash
+# Install dependencies
+npm install
 
-- For AWS S3 storage:
-  ```bash
-  npm install @aws-sdk/client-s3 @aws-sdk/lib-storage
-  ```
+# Install dev dependencies
+npm install --save-dev jest @types/jest ts-jest
+```
 
-- For Google Cloud Storage:
-  ```bash
-  npm install @google-cloud/storage
-  ```
+## Testing
 
-## 💻 Usage
+The SDK includes comprehensive tests for all components:
+
+```bash
+# Run all tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run specific test file
+npm test -- RedisStorageProvider.test.ts
+
+# Run tests in watch mode
+npm test -- --watch
+```
+
+### Test Structure
+
+Tests are organized by component:
+
+```
+src/
+  __tests__/
+    RedisStorageProvider.test.ts
+    RedisCacheProvider.test.ts
+    StorageManager.test.ts
+    ProgressTracker.test.ts
+```
+
+### Writing Tests
+
+When adding new features or fixing bugs, please include tests:
 
 ```typescript
-import { BrowserState } from 'browserstate';
+import { StorageManager } from '../storage/StorageManager';
+import { GCSStorageProvider } from '../storage/GCSStorageProvider';
+import { RedisCacheProvider } from '../storage/RedisCacheProvider';
 
-// Local storage
-const localBrowserState = new BrowserState({
-  userId: 'user123',
-  storageType: 'local',
-  localOptions: {
-    storagePath: '/path/to/local/storage'
-  }
-});
+describe('StorageManager', () => {
+  let manager: StorageManager;
+  let mockStorage: jest.Mocked<GCSStorageProvider>;
+  let mockCache: jest.Mocked<RedisCacheProvider>;
 
-// AWS S3 storage
-const s3BrowserState = new BrowserState({
-  userId: 'user123',
-  storageType: 's3',
-  s3Options: {
-    bucketName: 'my-browser-states',
-    region: 'us-west-2',
-    accessKeyID: 'YOUR_ACCESS_KEY_ID',
-    secretAccessKey: 'YOUR_SECRET_ACCESS_KEY'
-  }
-});
+  beforeEach(() => {
+    mockStorage = {
+      upload: jest.fn(),
+      download: jest.fn(),
+      deleteSession: jest.fn(),
+      listSessions: jest.fn()
+    } as any;
 
-// Google Cloud Storage
-const gcsBrowserState = new BrowserState({
-  userId: 'user123',
-  storageType: 'gcs',
-  gcsOptions: {
-    bucketName: 'my-browser-states',
-    projectID: 'your-project-id',
-    keyFilename: '/path/to/service-account-key.json'
-  }
-});
+    mockCache = {
+      upload: jest.fn(),
+      download: jest.fn(),
+      deleteSession: jest.fn(),
+      listSessions: jest.fn()
+    } as any;
 
-// With autoCleanup disabled
-const longRunningBrowserState = new BrowserState({
-  userId: 'user123',
-  storageType: 'local',
-  autoCleanup: false, // Disable automatic cleanup
-  localOptions: {
-    storagePath: '/path/to/local/storage'
-  }
-});
-
-// Use browser state
-async function example() {
-  // Mount a session
-  // For cloud storage (S3/GCS): Downloads the session from storage (if it exists) or creates a new one
-  // For local storage: Uses the existing session or creates a new one
-  // Returns the path to the local directory containing the browser profile
-  // This path must be used when launching the browser
-  const userDataDir = await browserState.mount('session123');
-
-  // Your browser automation code here...
-
-  // Launch Chrome with the mounted profile and additional configurations
-  // userDataDir contains all the browser profile data (cookies, storage, etc.)
-  // This ensures the browser launches with the exact same state as last time
-  console.log("Launching Chrome browser with additional configurations...");
-  const chromeContext = await chromium.launchPersistentContext(userDataDir, {
-    headless: false, // Launch in non-headless mode for visibility
-    slowMo: 100, // Slow down operations for demo purposes
-    // Additional configurations can be added here as needed
+    manager = new StorageManager({
+      storageProvider: mockStorage,
+      cacheProvider: mockCache
+    });
   });
 
-  // Perform browser automation tasks with the launched browser context
-  // Example: Navigate to a website and perform actions
-  const page = await chromeContext.newPage();
-  await page.goto('https://example.com');
-  await page.locator('text=Click me').click();
+  it('should handle cache hits correctly', async () => {
+    const sessionId = 'test-session';
+    const testData = 'test-data';
+    
+    mockCache.download.mockResolvedValue(testData);
+    
+    const result = await manager.download(sessionId);
+    
+    expect(result).toBe(testData);
+    expect(mockStorage.download).not.toHaveBeenCalled();
+  });
 
-  // Close the browser context to free up resources
-  console.log("Closing Chrome browser...");
-  await chromeContext.close();
+  it('should handle cache misses correctly', async () => {
+    const sessionId = 'test-session';
+    const testData = 'test-data';
+    
+    mockCache.download.mockResolvedValue(null);
+    mockStorage.download.mockResolvedValue(testData);
+    
+    const result = await manager.download(sessionId);
+    
+    expect(result).toBe(testData);
+    expect(mockStorage.download).toHaveBeenCalledWith(sessionId);
+  });
+});
+```
 
-  // Unmount and save the session
-  // This is crucial - it ensures all browser state changes are saved back to storage
-  // Without this, any changes made during automation would be lost
-  // For cloud storage (S3/GCS): This uploads all changes back to the cloud
-  // For local storage: Since files are already in the correct location, this just cleans up temporary files
-  await browserState.unmount();
+### Test Coverage
+
+The project maintains high test coverage:
+- Unit tests for all components
+- Integration tests for provider interactions
+- Error handling tests
+- Edge case coverage
+
+## Quick Start
+
+### Basic Usage with GCS and Redis Cache
+
+```typescript
+import { StorageManager } from 'browser-state-storage';
+
+// Create storage manager with GCS and Redis
+const manager = new StorageManager({
+  storageProvider: new GCSStorageProvider({
+    bucketName: 'my-bucket',
+    projectID: 'my-project',
+    keyFilename: 'path/to/key.json'
+  }),
+  cacheProvider: new RedisCacheProvider({
+    host: 'localhost',
+    port: 6379,
+    password: 'optional-password',
+    db: 0
+  }),
+  options: {
+    maxCacheSize: 1000,        // Maximum number of sessions to cache
+    cacheStrategy: 'lru',      // 'lru' or 'fifo'
+    backgroundSync: true       // Update cache asynchronously
+  }
+});
+
+// Upload session data
+await manager.upload('session1', JSON.stringify({ /* session data */ }));
+
+// Download session data
+const data = await manager.download('session1');
+
+// List all sessions
+const sessions = await manager.listSessions();
+
+// Delete a session
+await manager.deleteSession('session1');
+
+// Track upload/download progress
+manager.onProgress(progress => {
+  console.log(`Operation progress: ${progress}%`);
+});
+```
+
+### Using the Factory Method (Simpler Configuration)
+
+```typescript
+import { StorageManager } from 'browser-state-storage';
+
+// Create storage manager using the factory method
+const manager = StorageManager.fromOptions({
+  gcsOptions: {
+    bucketName: 'my-bucket',
+    projectID: 'my-project',
+    keyFilename: 'path/to/key.json'
+  },
+  redisOptions: {
+    host: 'localhost',
+    port: 6379,
+    password: 'optional-password',
+    db: 0
+  },
+  maxCacheSize: 1000,
+  cacheStrategy: 'lru',
+  backgroundSync: true
+});
+```
+
+### Using Without Cache
+
+```typescript
+import { StorageManager } from 'browser-state-storage';
+
+// Create storage manager without caching
+const manager = new StorageManager({
+  storageProvider: new GCSStorageProvider({
+    bucketName: 'my-bucket',
+    projectID: 'my-project',
+    keyFilename: 'path/to/key.json'
+  })
+});
+```
+
+## Architecture
+
+The SDK uses a provider-based architecture:
+
+1. **StorageProvider**: Handles persistent storage (e.g., GCS)
+2. **CacheProvider**: Manages caching layer (e.g., Redis)
+3. **StorageManager**: Coordinates between storage and cache
+
+### Cache Behavior
+
+- **Read Strategy**:
+  1. Try cache first
+  2. If cache miss, read from storage
+  3. Update cache in background (if enabled)
+
+- **Write Strategy**:
+  1. Write to storage first
+  2. Update cache in background (if enabled)
+  3. If background sync is disabled, wait for cache update
+
+- **Cache Eviction**:
+  - LRU (Least Recently Used): Removes least recently accessed items
+  - FIFO (First In, First Out): Removes oldest items first
+
+## Configuration Options
+
+### StorageManager Options
+
+```typescript
+interface StorageManagerOptions {
+  maxCacheSize?: number;      // Maximum number of sessions to cache
+  cacheStrategy?: 'lru' | 'fifo';  // Cache eviction strategy
+  backgroundSync?: boolean;   // Whether to update cache asynchronously
 }
 ```
 
-## 📚 API
-
-### BrowserState
-
-The main class for managing browser state.
-
-#### Constructor Options
-
-- `userId`: User identifier for organizing storage
-- `storageType`: Type of storage to use ('local', 's3', or 'gcs')
-- `autoCleanup`: Whether to automatically clean up temporary files on process exit (default: true)
-- `localOptions`: Options for local storage
-  - `storagePath`: Local storage directory path
-- `s3Options`: Options for AWS S3 storage
-  - `bucketName`: S3 bucket name
-  - `region`: AWS region
-  - `accessKeyID`: AWS access key ID
-  - `secretAccessKey`: AWS secret access key
-- `gcsOptions`: Options for Google Cloud Storage
-  - `bucketName`: GCS bucket name
-  - `projectID`: Google Cloud project ID
-  - `keyFilename`: Path to service account key file
-
-#### Methods
-
-- `mount(sessionId: string)`: Downloads and prepares a session for use
-- `unmount()`: Uploads and cleans up the current session
-- `listSessions()`: Lists all available sessions for the user
-- `deleteSession(sessionId: string)`: Deletes a specific session
-- `cleanup()`: Manually clean up temporary files (useful when autoCleanup is disabled)
-
-## 🧹 Automatic Cleanup
-
-BrowserState creates temporary files on your local system when working with browser profiles. By default, these files are automatically cleaned up when:
-
-1. You call `unmount()` to save the session
-2. The Node.js process exits normally
-3. The process is terminated with SIGINT (Ctrl+C)
-4. An uncaught exception occurs
-
-You can disable this automatic cleanup by setting `autoCleanup: false` in the constructor options:
+### GCS Storage Provider Options
 
 ```typescript
-const browserState = new BrowserState({
-  userId: 'user123',
-  storageType: 'local',
-  autoCleanup: false,
-  localOptions: {
-    storagePath: '/path/to/local/storage'
-  }
+interface GCSOptions {
+  bucketName: string;        // GCS bucket name
+  projectID: string;         // GCP project ID
+  keyFilename: string;       // Path to service account key file
+}
+```
+
+### Redis Cache Provider Options
+
+```typescript
+interface RedisOptions {
+  host: string;             // Redis host
+  port: number;             // Redis port
+  password?: string;        // Optional password
+  db?: number;             // Optional database number
+}
+```
+
+## Error Handling
+
+The SDK provides comprehensive error handling:
+
+- Storage errors are propagated to the caller
+- Cache errors are logged but don't block operations
+- Background sync errors are logged but don't affect the main operation
+
+## Progress Tracking
+
+Track upload and download progress:
+
+```typescript
+manager.onProgress(progress => {
+  console.log(`Operation progress: ${progress}%`);
 });
+
+// Remove progress listener
+manager.offProgress(callback);
 ```
 
-When automatic cleanup is disabled, you can manually clean up temporary files by calling:
+## Contributing
 
-```typescript
-await browserState.cleanup();
-```
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a new Pull Request
 
-This is useful in scenarios where you want more control over when cleanup occurs, such as in long-running server processes or when handling multiple browser states.
-
-## 🐛 Issues and Feedback
-
-If you encounter any issues or have feedback about specific storage providers:
-
-1. 🔍 Check the existing GitHub issues to see if your problem has been reported
-2. ✍️ Create a new issue with:
-   - A clear description of the problem
-   - Which storage provider you're using
-   - Steps to reproduce the issue
-   - Environment details (Node.js version, browser, etc.)
-
-We especially welcome feedback and testing reports for the S3 and GCS storage providers.
-
-## 📄 License
+## License
 
 MIT
