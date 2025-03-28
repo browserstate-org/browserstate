@@ -5,7 +5,7 @@ import path from "path";
 import os from "os";
 
 export interface GCSStorageOptions {
-  keyFilePath?: string;
+  keyFilename?: string;
   projectID?: string;
   prefix?: string;
 }
@@ -21,13 +21,15 @@ export class GCSStorage implements StorageProvider {
   private gcpModulesLoaded = false;
   private gcpSDK: GCPStorage | null = null;
   private prefix?: string;
+  private options?: GCSStorageOptions;
 
   constructor(bucketName: string, options?: GCSStorageOptions) {
     this.bucketName = bucketName;
     this.prefix = options?.prefix;
+    this.options = options;
 
     // Initialize with dynamic import (but don't throw if it fails)
-    this.initClient(options).catch((error) => {
+    this.initClient().catch((error) => {
       if (process.env.NODE_ENV !== "production") {
         console.warn(
           "[GCS] Initialization failed, will retry on first usage:",
@@ -40,7 +42,7 @@ export class GCSStorage implements StorageProvider {
   /**
    * Dynamically imports Google Cloud Storage module
    */
-  private async initClient(options?: GCSStorageOptions): Promise<void> {
+  private async initClient(): Promise<void> {
     if (this.gcpModulesLoaded) return;
 
     try {
@@ -49,26 +51,48 @@ export class GCSStorage implements StorageProvider {
 
       const storageOptions: Record<string, unknown> = {};
 
-      if (options?.keyFilePath) {
-        storageOptions.keyFilename = options.keyFilePath;
+      if (this.options?.keyFilename) {
+        // Verify the key file exists
+        if (!fs.existsSync(this.options.keyFilename)) {
+          throw new Error(
+            `Service account key file not found at: ${this.options.keyFilename}`,
+          );
+        }
+        storageOptions.keyFilename = this.options.keyFilename;
       }
 
-      if (options?.projectID) {
-        storageOptions.projectId = options.projectID;
+      if (this.options?.projectID) {
+        storageOptions.projectId = this.options.projectID;
       }
 
-      this.storageClient = new this.gcpSDK.Storage(
-        Object.keys(storageOptions).length > 0 ? storageOptions : undefined,
-      );
+      // Create storage client with options
+      this.storageClient = new this.gcpSDK.Storage(storageOptions);
+
+      // Verify credentials by attempting to list buckets
+      try {
+        await this.storageClient.getBuckets();
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes("Could not load the default credentials")) {
+          throw new Error(
+            `Failed to load GCP credentials. Please check your service account key file at: ${this.options?.keyFilename}`,
+          );
+        }
+        throw error;
+      }
+
       this.gcpModulesLoaded = true;
     } catch (error) {
       this.storageClient = null;
       this.gcpSDK = null;
 
+      // Always throw the error in development
       if (process.env.NODE_ENV !== "production") {
-        console.error("[GCS] Failed to load GCP Storage module:", error);
+        throw error;
       }
-      // We'll throw a more specific error when methods are called
+
+      // In production, we'll throw when methods are called
     }
   }
 

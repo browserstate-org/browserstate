@@ -153,7 +153,7 @@ export class BrowserState {
           throw new Error("GCS options required when using gcs storage");
         }
         this.storageProvider = new GCSStorage(options.gcsOptions.bucketName, {
-          keyFilePath: options.gcsOptions.keyFilename,
+          keyFilename: options.gcsOptions.keyFilename,
           projectID: options.gcsOptions.projectID,
           prefix: options.gcsOptions.prefix,
         });
