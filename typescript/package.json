@@ -7,6 +7,9 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "tag": "latest"
+  },
   "scripts": {
     "build": "tsc",
     "test": "jest",
