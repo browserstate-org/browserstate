@@ -1,5 +1,5 @@
 import { StorageProvider } from "./StorageProvider";
-import { Storage } from "@google-cloud/storage";
+import type { Storage as StorageType } from "@google-cloud/storage";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
@@ -10,28 +10,82 @@ export interface GCSStorageOptions {
   prefix?: string;
 }
 
+// Define type for dynamic import
+interface GCPStorage {
+  Storage: typeof StorageType;
+}
+
 export class GCSStorage implements StorageProvider {
   private bucketName: string;
-  private storageClient: Storage;
+  private storageClient: StorageType | null = null;
+  private gcpModulesLoaded = false;
+  private gcpSDK: GCPStorage | null = null;
   private prefix?: string;
 
   constructor(bucketName: string, options?: GCSStorageOptions) {
     this.bucketName = bucketName;
     this.prefix = options?.prefix;
 
-    const storageOptions: Record<string, unknown> = {};
+    // Initialize with dynamic import (but don't throw if it fails)
+    this.initClient(options).catch((error) => {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(
+          "[GCS] Initialization failed, will retry on first usage:",
+          error,
+        );
+      }
+    });
+  }
 
-    if (options?.keyFilePath) {
-      storageOptions.keyFilename = options.keyFilePath;
+  /**
+   * Dynamically imports Google Cloud Storage module
+   */
+  private async initClient(options?: GCSStorageOptions): Promise<void> {
+    if (this.gcpModulesLoaded) return;
+
+    try {
+      // Dynamically import GCP Storage module
+      this.gcpSDK = (await import("@google-cloud/storage")) as GCPStorage;
+
+      const storageOptions: Record<string, unknown> = {};
+
+      if (options?.keyFilePath) {
+        storageOptions.keyFilename = options.keyFilePath;
+      }
+
+      if (options?.projectID) {
+        storageOptions.projectId = options.projectID;
+      }
+
+      this.storageClient = new this.gcpSDK.Storage(
+        Object.keys(storageOptions).length > 0 ? storageOptions : undefined,
+      );
+      this.gcpModulesLoaded = true;
+    } catch (error) {
+      this.storageClient = null;
+      this.gcpSDK = null;
+
+      if (process.env.NODE_ENV !== "production") {
+        console.error("[GCS] Failed to load GCP Storage module:", error);
+      }
+      // We'll throw a more specific error when methods are called
     }
+  }
 
-    if (options?.projectID) {
-      storageOptions.projectId = options.projectID;
+  /**
+   * Ensures Storage client is available
+   */
+  private async ensureClientInitialized(): Promise<void> {
+    if (!this.gcpModulesLoaded || !this.storageClient || !this.gcpSDK) {
+      await this.initClient();
+
+      // Check if initialization succeeded
+      if (!this.gcpModulesLoaded || !this.storageClient || !this.gcpSDK) {
+        throw new Error(
+          "Google Cloud Storage module not available. Install @google-cloud/storage to use GCSStorage.",
+        );
+      }
     }
-
-    this.storageClient = new Storage(
-      Object.keys(storageOptions).length > 0 ? storageOptions : undefined,
-    );
   }
 
   /**
@@ -61,7 +115,9 @@ export class GCSStorage implements StorageProvider {
    * Downloads a browser session to a local directory
    */
   async download(userId: string, sessionId: string): Promise<string> {
-    const bucket = this.storageClient.bucket(this.bucketName);
+    await this.ensureClientInitialized();
+
+    const bucket = this.storageClient!.bucket(this.bucketName);
     const prefix = this.getSessionPrefix(userId, sessionId);
     const targetPath = this.getTempPath(userId, sessionId);
 
@@ -203,7 +259,9 @@ export class GCSStorage implements StorageProvider {
     sessionId: string,
     filePath: string,
   ): Promise<void> {
-    const bucket = this.storageClient.bucket(this.bucketName);
+    await this.ensureClientInitialized();
+
+    const bucket = this.storageClient!.bucket(this.bucketName);
     const prefix = this.getSessionPrefix(userId, sessionId);
 
     console.log(
@@ -250,7 +308,9 @@ export class GCSStorage implements StorageProvider {
    * Lists all available sessions for a user
    */
   async listSessions(userId: string): Promise<string[]> {
-    const bucket = this.storageClient.bucket(this.bucketName);
+    await this.ensureClientInitialized();
+
+    const bucket = this.storageClient!.bucket(this.bucketName);
     const prefix = this.getUserPrefix(userId);
 
     console.log(
@@ -300,7 +360,9 @@ export class GCSStorage implements StorageProvider {
    * Deletes a session
    */
   async deleteSession(userId: string, sessionId: string): Promise<void> {
-    const bucket = this.storageClient.bucket(this.bucketName);
+    await this.ensureClientInitialized();
+
+    const bucket = this.storageClient!.bucket(this.bucketName);
     const prefix = this.getSessionPrefix(userId, sessionId);
 
     console.log(
