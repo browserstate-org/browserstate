@@ -2,12 +2,13 @@ name: Canary Release
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [closed]
     branches:
       - main
 
 jobs:
   canary-release:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     
     steps:
@@ -15,6 +16,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -64,6 +66,7 @@ jobs:
       
       - name: Commit and push changes
         run: |
+          cd ..
           git add typescript/package.json typescript/README.md
           git commit -m "chore: release canary version ${CANARY_VERSION}"
-          git push 
+          git push origin HEAD:main 
