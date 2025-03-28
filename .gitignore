@@ -1,4 +1,5 @@
 # Extra files
+python/tests/__init__.py
 python/examples/__init__.py
 python/browserstate/__pycache__/
 python/browserstate/storage/__pycache__/
