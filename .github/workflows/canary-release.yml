@@ -2,13 +2,12 @@ name: Canary Release
 
 on:
   pull_request:
-    types: [closed]
+    types: [opened, synchronize, reopened]
     branches:
       - main
 
 jobs:
   canary-release:
-    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     
     steps:
@@ -44,8 +43,8 @@ jobs:
           cd typescript
           # Get current version
           CURRENT_VERSION=$(node -p "require('./package.json').version")
-          # Create canary version with timestamp
-          CANARY_VERSION="${CURRENT_VERSION}-canary.$(date +%Y%m%d%H%M%S)"
+          # Create canary version with timestamp and PR number
+          CANARY_VERSION="${CURRENT_VERSION}-canary.${GITHUB_PULL_REQUEST_NUMBER}.$(date +%Y%m%d%H%M%S)"
           # Update package.json
           npm version $CANARY_VERSION --no-git-tag-version
           # Add publishConfig for canary tag
