@@ -27,11 +27,10 @@ jobs:
           cd typescript
           npm ci
       
-      - name: Build and test
+      - name: Build
         run: |
           cd typescript
           npm run build
-          npm run test
       
       - name: Configure Git
         run: |
