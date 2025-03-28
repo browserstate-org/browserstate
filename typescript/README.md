@@ -44,6 +44,20 @@ Now you can move fast without breaking sessions—or getting flagged as a bot.
 npm install browserstate
 ```
 
+## 🚀 Canary Releases
+
+BrowserState provides canary releases for testing new features before they're available in stable releases. Canary versions are published automatically when changes are merged to main.
+
+```bash
+# Install latest canary version
+npm install browserstate@canary
+
+# Install specific canary version
+npm install browserstate@0.1.13-canary.20240328215210
+```
+
+> ⚠️ **Warning**: Canary releases may contain breaking changes and should be used with caution in production environments.
+
 ## 🔧 Optional Dependencies
 
 BrowserState supports multiple storage backends. Depending on your needs, you may want to install additional dependencies:
