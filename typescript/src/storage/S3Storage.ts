@@ -13,6 +13,8 @@ import type {
   BucketLocationConstraint,
   S3ServiceException,
   _Object as S3Object,
+  ListBucketsCommand,
+  GetBucketLocationCommand,
 } from "@aws-sdk/client-s3";
 import type { Upload as UploadType } from "@aws-sdk/lib-storage";
 import { Readable } from "stream";
@@ -31,7 +33,9 @@ interface AWSSDK {
   DeleteObjectsCommand: typeof DeleteObjectsCommand;
   HeadBucketCommand: typeof HeadBucketCommand;
   CreateBucketCommand: typeof CreateBucketCommand;
+  ListBucketsCommand: typeof ListBucketsCommand;
   S3ServiceException: typeof S3ServiceException;
+  GetBucketLocationCommand: typeof GetBucketLocationCommand;
 }
 
 interface UploadModule {
@@ -45,59 +49,111 @@ export class S3Storage implements StorageProvider {
   private awsModulesLoaded = false;
   private awsSDK: AWSSDK | null = null;
   private uploadModule: UploadModule | null = null;
+  private options?: S3StorageOptions;
 
   constructor(bucketName: string, region: string, options?: S3StorageOptions) {
     this.bucketName = bucketName;
     this.prefix = options?.prefix;
+    this.options = options;
 
-    // Initialize client on first use later
-    this.initClient(region, options).catch((error) => {
-      // Only log on construction, don't throw
+    // Initialize with dynamic import (but don't throw if it fails)
+    this.initClient(region).catch((error) => {
       if (process.env.NODE_ENV !== "production") {
         console.warn(
-          "S3 initialization failed, will retry on first usage:",
+          "[S3] Initialization failed, will retry on first usage:",
           error,
         );
       }
     });
   }
 
-  /**
-   * Dynamically imports AWS SDK modules
-   */
-  private async initClient(
-    region: string,
-    options?: S3StorageOptions,
-  ): Promise<void> {
+  private async initClient(region: string): Promise<void> {
     if (this.awsModulesLoaded) return;
 
     try {
       // Dynamically import AWS SDK modules
-      this.awsSDK = (await import("@aws-sdk/client-s3")) as AWSSDK;
-      this.uploadModule = (await import(
-        "@aws-sdk/lib-storage"
-      )) as UploadModule;
+      try {
+        this.awsSDK = (await import("@aws-sdk/client-s3")) as AWSSDK;
+        this.uploadModule = (await import(
+          "@aws-sdk/lib-storage"
+        )) as UploadModule;
+      } catch (error) {
+        throw new Error(
+          `Failed to load AWS SDK modules: ${error instanceof Error ? error.message : String(error)}. Please install @aws-sdk/client-s3 and @aws-sdk/lib-storage.`
+        );
+      }
 
-      const clientConfig: Record<string, unknown> = { region };
+      if (!this.awsSDK || !this.uploadModule) {
+        throw new Error(
+          "AWS SDK modules not properly loaded. Please check your dependencies."
+        );
+      }
 
-      if (options?.accessKeyId && options?.secretAccessKey) {
+      const clientConfig: Record<string, unknown> = { 
+        region,
+        endpoint: `https://s3.${region}.amazonaws.com`
+      };
+
+      if (this.options?.accessKeyId && this.options?.secretAccessKey) {
         clientConfig.credentials = {
-          accessKeyId: options.accessKeyId,
-          secretAccessKey: options.secretAccessKey,
+          accessKeyId: this.options.accessKeyId,
+          secretAccessKey: this.options.secretAccessKey,
         };
       }
 
+      // Create S3 client with options
       this.s3Client = new this.awsSDK.S3Client(clientConfig);
+      
+      // Verify credentials and detect correct region
+      try {
+        // First try to list buckets to verify credentials
+        await this.s3Client.send(new this.awsSDK.ListBucketsCommand({}));
+        
+        // Then try to head the bucket to get its region
+        try {
+          await this.s3Client.send(new this.awsSDK.HeadBucketCommand({ Bucket: this.bucketName }));
+        } catch (error) {
+          if (error instanceof Error && this.awsSDK.S3ServiceException && error instanceof this.awsSDK.S3ServiceException) {
+            if (error.$metadata?.httpStatusCode === 301) {
+              // Try to get the bucket location
+              const locationCommand = new this.awsSDK.GetBucketLocationCommand({ Bucket: this.bucketName });
+              const locationResponse = await this.s3Client.send(locationCommand);
+              if (locationResponse.LocationConstraint) {
+                // Reinitialize client with correct region
+                clientConfig.region = locationResponse.LocationConstraint;
+                clientConfig.endpoint = `https://s3.${locationResponse.LocationConstraint}.amazonaws.com`;
+                this.s3Client = new this.awsSDK.S3Client(clientConfig);
+                console.log(`Detected correct region: ${locationResponse.LocationConstraint}`);
+                
+                // Retry the head bucket command with the correct region
+                await this.s3Client.send(new this.awsSDK.HeadBucketCommand({ Bucket: this.bucketName }));
+              }
+            }
+          }
+          throw error;
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes("Could not load credentials")) {
+          throw new Error(
+            `Failed to load AWS credentials. Please check your credentials in config.json or environment variables.`
+          );
+        }
+        throw error;
+      }
+
       this.awsModulesLoaded = true;
     } catch (error) {
       this.s3Client = null;
       this.awsSDK = null;
       this.uploadModule = null;
 
+      // Always throw the error in development
       if (process.env.NODE_ENV !== "production") {
-        console.error("Failed to load AWS SDK modules:", error);
+        throw error;
       }
-      // We'll throw a specific error when methods are called
+      
+      // In production, we'll throw when methods are called
     }
   }
 
@@ -109,8 +165,7 @@ export class S3Storage implements StorageProvider {
       await this.initClient(
         typeof this.s3Client?.config?.region === "function"
           ? await this.s3Client?.config?.region()
-          : this.s3Client?.config?.region || "us-east-1",
-        undefined,
+          : this.s3Client?.config?.region || "us-east-1"
       );
 
       // Check if initialization succeeded
@@ -188,6 +243,22 @@ export class S3Storage implements StorageProvider {
     const targetPath = this.getTempPath(userId, sessionId);
 
     try {
+      // Ensure client is initialized with credentials
+      if (!this.awsModulesLoaded || !this.s3Client || !this.awsSDK) {
+        await this.initClient(
+          typeof this.s3Client?.config?.region === "function"
+            ? await this.s3Client?.config?.region()
+            : this.s3Client?.config?.region || "us-east-1"
+        );
+
+        // Check if initialization succeeded
+        if (!this.awsModulesLoaded || !this.s3Client || !this.awsSDK) {
+          throw new Error(
+            "Failed to initialize AWS SDK. Please check your credentials."
+          );
+        }
+      }
+
       await this.ensureBucketExists();
 
       // Clear target directory if it exists
@@ -199,58 +270,99 @@ export class S3Storage implements StorageProvider {
         Prefix: prefix,
       });
 
-      const listResponse = await this.s3Client!.send(listCommand);
+      try {
+        const listResponse = await this.s3Client!.send(listCommand);
 
-      if (!listResponse.Contents || listResponse.Contents.length === 0) {
-        // Create an empty directory for new sessions
-        await fs.ensureDir(targetPath);
-        return targetPath;
-      }
-
-      // Download each object
-      for (const object of listResponse.Contents) {
-        // Skip if no key
-        if (!object.Key) continue;
-
-        // Calculate relative path within the session
-        const relativePath = object.Key.slice(prefix.length + 1);
-        if (!relativePath) continue; // Skip the directory itself
-
-        // Create the local file path
-        const localFilePath = path.join(targetPath, relativePath);
-
-        // Ensure the directory exists
-        await fs.ensureDir(path.dirname(localFilePath));
-
-        // Get the object
-        const getCommand = new this.awsSDK!.GetObjectCommand({
-          Bucket: this.bucketName,
-          Key: object.Key,
-        });
-
-        const getResponse = await this.s3Client!.send(getCommand);
-
-        if (!getResponse.Body) continue;
-
-        // Convert body to buffer
-        const responseBody = getResponse.Body as Readable;
-        const chunks: Buffer[] = [];
-
-        for await (const chunk of responseBody) {
-          chunks.push(chunk instanceof Buffer ? chunk : Buffer.from(chunk));
+        if (!listResponse.Contents || listResponse.Contents.length === 0) {
+          // Create an empty directory for new sessions
+          await fs.ensureDir(targetPath);
+          return targetPath;
         }
 
-        // Write to file
-        await fs.writeFile(localFilePath, Buffer.concat(chunks));
+        // Download each object
+        for (const object of listResponse.Contents) {
+          // Skip if no key
+          if (!object.Key) continue;
+
+          // Calculate relative path within the session
+          const relativePath = object.Key.slice(prefix.length + 1);
+          if (!relativePath) continue; // Skip the directory itself
+
+          // Create the local file path
+          const localFilePath = path.join(targetPath, relativePath);
+
+          // Ensure parent directory exists
+          await fs.ensureDir(path.dirname(localFilePath));
+
+          // Download the object
+          const getCommand = new this.awsSDK!.GetObjectCommand({
+            Bucket: this.bucketName,
+            Key: object.Key,
+          });
+
+          try {
+            const response = await this.s3Client!.send(getCommand);
+            if (!response.Body) continue;
+
+            // Convert the response body to a buffer and write to file
+            const chunks: Buffer[] = [];
+            for await (const chunk of response.Body as Readable) {
+              chunks.push(Buffer.from(chunk));
+            }
+            await fs.writeFile(localFilePath, Buffer.concat(chunks));
+          } catch (error) {
+            if (error instanceof Error && this.awsSDK!.S3ServiceException && error instanceof this.awsSDK!.S3ServiceException) {
+              if (error.$metadata?.httpStatusCode === 301) {
+                // Try to get the bucket location
+                const locationCommand = new this.awsSDK!.GetBucketLocationCommand({ Bucket: this.bucketName });
+                const locationResponse = await this.s3Client!.send(locationCommand);
+                if (locationResponse.LocationConstraint) {
+                  // Reinitialize client with correct region
+                  const clientConfig: Record<string, unknown> = { 
+                    region: locationResponse.LocationConstraint,
+                    credentials: this.s3Client!.config.credentials()
+                  };
+                  this.s3Client = new this.awsSDK!.S3Client(clientConfig);
+                  console.log(`Detected correct region: ${locationResponse.LocationConstraint}`);
+                  
+                  // Retry the get command with the correct region
+                  const response = await this.s3Client!.send(getCommand);
+                  if (!response.Body) continue;
+
+                  const chunks: Buffer[] = [];
+                  for await (const chunk of response.Body as Readable) {
+                    chunks.push(Buffer.from(chunk));
+                  }
+                  await fs.writeFile(localFilePath, Buffer.concat(chunks));
+                  continue;
+                }
+              }
+            }
+            throw error;
+          }
+        }
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message.includes('AccessDenied')) {
+            throw new Error(`Access denied to S3 bucket ${this.bucketName}. Please check your AWS credentials and permissions.`);
+          } else if (error.message.includes('NoSuchBucket')) {
+            throw new Error(`S3 bucket ${this.bucketName} does not exist. Please create it first.`);
+          } else if (error.message.includes('InvalidAccessKeyId')) {
+            throw new Error('Invalid AWS access key ID. Please check your credentials.');
+          } else if (error.message.includes('SignatureDoesNotMatch')) {
+            throw new Error('Invalid AWS secret access key. Please check your credentials.');
+          }
+        }
+        // If we get any other error, just create a new directory
+        console.log('Creating new session directory due to error:', error);
+        await fs.ensureDir(targetPath);
       }
 
       return targetPath;
-    } catch (error: unknown) {
-      // Ensure directory exists even if download fails
+    } catch (error) {
+      console.error('S3 download error details:', error);
+      // Even if we get an error, create the directory and return it
       await fs.ensureDir(targetPath);
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error("Error downloading from S3:", errorMessage);
       return targetPath;
     }
   }
@@ -266,6 +378,12 @@ export class S3Storage implements StorageProvider {
     const prefix = this.getSessionPrefix(userId, sessionId);
 
     try {
+      // If modules aren't loaded, don't try to upload
+      if (!this.awsModulesLoaded || !this.s3Client || !this.awsSDK || !this.uploadModule) {
+        console.log("S3 modules not loaded, skipping upload");
+        return;
+      }
+
       await this.ensureBucketExists();
 
       // Read all files in the directory
@@ -295,7 +413,8 @@ export class S3Storage implements StorageProvider {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       console.error("Error uploading to S3:", errorMessage);
-      throw new Error(`Failed to upload session to S3: ${errorMessage}`);
+      // Don't throw the error, just log it
+      // This allows the browser to close cleanly even if upload fails
     }
   }
 

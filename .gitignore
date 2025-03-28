@@ -56,3 +56,6 @@ examples/**/playwright-report/
 **/*-key.json
 typescript/examples/google/service-account.json
 typescript/examples/s3/aws-credentials.json
+
+# S3 Configuration
+typescript/examples/s3/config.json
