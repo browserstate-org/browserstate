@@ -2,7 +2,10 @@ import { StorageProvider } from "./storage/StorageProvider";
 import { LocalStorage } from "./storage/LocalStorage";
 import { S3Storage } from "./storage/S3Storage";
 import { GCSStorage } from "./storage/GCSStorage";
-import { RedisStorageProvider, RedisStorageOptions } from "./storage/RedisStorage";
+import {
+  RedisStorageProvider,
+  RedisStorageOptions,
+} from "./storage/RedisStorage";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
