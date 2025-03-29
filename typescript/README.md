@@ -375,3 +375,17 @@ npm install browserstate@
 ```
 
 Canary releases are pre-release versions that may contain breaking changes or experimental features. Use with caution in production environments.
+
+## Canary Releases
+
+To install the latest canary version:
+```bash
+npm install browserstate@canary
+```
+
+To install a specific canary version:
+```bash
+npm install browserstate@
+```
+
+Canary releases are pre-release versions that may contain breaking changes or experimental features. Use with caution in production environments.
