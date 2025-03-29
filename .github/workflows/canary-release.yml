@@ -37,11 +37,17 @@ jobs:
       - name: Build
         run: |
           cd typescript
+          echo "Running TypeScript build..."
+          npx tsc --listFiles
           npm run build
+          echo "Build completed. Checking dist directory:"
+          ls -la dist/
       
       - name: Verify build output
         run: |
           cd typescript
+          echo "Checking for compiled files..."
+          ls -la dist/
           if [ ! -f "dist/index.js" ] || [ ! -f "dist/index.d.ts" ]; then
             echo "Build verification failed: Compiled files are missing"
             exit 1
