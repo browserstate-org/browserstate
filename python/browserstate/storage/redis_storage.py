@@ -2,6 +2,7 @@ import os
 import io
 import tarfile
 import tempfile
+import shutil
 import logging
 from typing import List
 
@@ -34,6 +35,21 @@ class RedisStorage(StorageProvider):
         """
         return f"{self.key_prefix}:{user_id}:{session_id}"
     
+    def _get_temp_path(self, user_id: str, session_id: str) -> str:
+        """
+        Get a temporary path for a session similar to S3Storage implementation.
+        
+        Args:
+            user_id: User identifier.
+            session_id: Session identifier.
+            
+        Returns:
+            Full path to the temporary session directory.
+        """
+        temp_dir = os.path.join(tempfile.gettempdir(), "browserstate", user_id)
+        os.makedirs(temp_dir, exist_ok=True)
+        return os.path.join(temp_dir, session_id)
+    
     def _safe_extract(self, tar_obj: tarfile.TarFile, path: str) -> None:
         """
         Safely extract tar file to prevent path traversal vulnerabilities.
@@ -63,10 +79,15 @@ class RedisStorage(StorageProvider):
         """
         key = self._get_key(user_id, session_id)
         tar_bytes = self.redis_client.get(key)
-        target_path = tempfile.mkdtemp(prefix="browserstate_")
+        
+        target_path = self._get_temp_path(user_id, session_id)
+        
+        if os.path.exists(target_path):
+            shutil.rmtree(target_path)
+        os.makedirs(target_path, exist_ok=True)
+        
         if tar_bytes is None:
             # No session found; return an empty directory.
-            os.makedirs(target_path, exist_ok=True)
             return target_path
         
         try:

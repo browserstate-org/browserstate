@@ -2,41 +2,37 @@ import os
 import shutil
 import tempfile
 import pytest
-from browserstate.storage.local_storage import LocalStorage
-from browserstate.storage.s3_storage import S3Storage
-from browserstate.storage.redis_storage import RedisStorage
-import fakeredis
+from unittest.mock import MagicMock
+import boto3
+from moto import mock_aws
 
-# Fixture to create a dummy session directory with some files.
+# Fixture: Dummy session directory with sample files.
 @pytest.fixture
 def dummy_session_dir():
-    # Create a temporary directory that represents a session folder
     session_dir = tempfile.mkdtemp(prefix="dummy_session_")
     try:
-        # Create a file in the root of the session folder.
+        # Root file.
         file_path = os.path.join(session_dir, "test.txt")
         with open(file_path, "w") as f:
             f.write("Hello, BrowserState!")
-        
-        # Create a subdirectory with a file.
+        # Subdirectory file.
         sub_dir = os.path.join(session_dir, "subfolder")
         os.makedirs(sub_dir, exist_ok=True)
         sub_file = os.path.join(sub_dir, "sub.txt")
         with open(sub_file, "w") as f:
             f.write("This is a subfolder file.")
-        
         yield session_dir
     finally:
         shutil.rmtree(session_dir, ignore_errors=True)
 
-# Fixture for a temporary base directory for LocalStorage.
+# Fixture: Temporary base directory for LocalStorage.
 @pytest.fixture
 def local_storage_base():
     base = tempfile.mkdtemp(prefix="local_storage_")
     yield base
     shutil.rmtree(base, ignore_errors=True)
 
-# Fixture for a fake Redis instance using fakeredis.
+# Fixture: Fake Redis instance (requires fakeredis).
 @pytest.fixture
 def fake_redis(monkeypatch):
     try:
@@ -44,21 +40,75 @@ def fake_redis(monkeypatch):
     except ImportError:
         pytest.skip("fakeredis not installed")
     fake = fakeredis.FakeRedis()
-    # Monkey-patch the redis.Redis.from_url to return our fake instance.
     from redis import Redis
     monkeypatch.setattr(Redis, "from_url", lambda url: fake)
     return fake
 
-# Fixture for setting up a fake S3 bucket using moto.
+# Fixture: Fake S3 bucket (requires moto).
 @pytest.fixture
 def s3_bucket():
-    try:
-        from moto import mock_s3
-    except ImportError:
-        pytest.skip("moto not installed")
-    from boto3 import client
-    with mock_s3():
-        s3 = client("s3", region_name="us-east-1")
+    with mock_aws():
+        s3 = boto3.resource("s3", region_name="us-east-1")
         bucket_name = "test-bucket"
         s3.create_bucket(Bucket=bucket_name)
         yield bucket_name
+
+# Fixture: Dummy GCS bucket for GCSStorage tests.
+@pytest.fixture
+def dummy_gcs_bucket():
+    fake_bucket = MagicMock()
+    fake_bucket._storage = {}
+
+    def list_blobs(prefix, delimiter=None):
+        blobs = []
+        for key, value in fake_bucket._storage.items():
+            if key.startswith(prefix):
+                fake_blob = MagicMock()
+                fake_blob.name = key
+
+                def download_to_filename(filename, content=value):
+                    with open(filename, "wb") as f:
+                        f.write(content)
+                fake_blob.download_to_filename = download_to_filename
+                blobs.append(fake_blob)
+        if delimiter:
+            prefixes = set()
+            for key in fake_bucket._storage.keys():
+                if key.startswith(prefix):
+                    rest = key[len(prefix):]
+                    if delimiter in rest:
+                        prefixes.add(prefix + rest.split(delimiter)[0] + delimiter)
+            fake_blob_collection = MagicMock()
+            fake_blob_collection.__iter__.return_value = blobs
+            fake_blob_collection.prefixes = list(prefixes)
+            return fake_blob_collection
+        return blobs
+
+    fake_bucket.list_blobs = list_blobs
+
+    def blob(blob_name):
+        fake_blob = MagicMock()
+        fake_blob.name = blob_name
+
+        def upload_from_filename(filename):
+            with open(filename, "rb") as f:
+                content = f.read()
+            fake_bucket._storage[blob_name] = content
+        fake_blob.upload_from_filename = upload_from_filename
+
+        def delete():
+            if blob_name in fake_bucket._storage:
+                del fake_bucket._storage[blob_name]
+        fake_blob.delete = delete
+
+        return fake_blob
+
+    fake_bucket.blob = blob
+    return fake_bucket
+
+# Fixture: Fake GCS client that returns our dummy bucket.
+@pytest.fixture
+def fake_gcs_client(dummy_gcs_bucket):
+    fake_client = MagicMock()
+    fake_client.bucket.return_value = dummy_gcs_bucket
+    return fake_client

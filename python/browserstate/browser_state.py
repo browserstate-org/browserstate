@@ -118,6 +118,8 @@ class BrowserState:
             
         except Exception as e:
             logging.error(f"Error unmounting session {self.active_session['id']}: {e}")
+            # Always clean up the local session
+            self._cleanup_session()
             raise
     
     def list_sessions(self) -> List[str]:
