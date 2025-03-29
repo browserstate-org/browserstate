@@ -2,20 +2,15 @@ import { StorageProvider } from "./StorageProvider";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
+// Only import the types that are actually used
 import type {
   S3Client as S3ClientType,
-  ListObjectsV2Command,
-  GetObjectCommand,
-  DeleteObjectsCommand,
-  HeadBucketCommand,
-  CreateBucketCommand,
   CreateBucketCommandInput,
   BucketLocationConstraint,
-  S3ServiceException,
   _Object as S3Object,
 } from "@aws-sdk/client-s3";
-import type { Upload as UploadType } from "@aws-sdk/lib-storage";
 import { Readable } from "stream";
+import { modules, AWSS3SDK, AWSS3Upload } from "../utils/DynamicImport";
 
 export interface S3StorageOptions {
   accessKeyId?: string;
@@ -23,28 +18,13 @@ export interface S3StorageOptions {
   prefix?: string;
 }
 
-// Define types for dynamic imports
-interface AWSSDK {
-  S3Client: typeof S3ClientType;
-  ListObjectsV2Command: typeof ListObjectsV2Command;
-  GetObjectCommand: typeof GetObjectCommand;
-  DeleteObjectsCommand: typeof DeleteObjectsCommand;
-  HeadBucketCommand: typeof HeadBucketCommand;
-  CreateBucketCommand: typeof CreateBucketCommand;
-  S3ServiceException: typeof S3ServiceException;
-}
-
-interface UploadModule {
-  Upload: typeof UploadType;
-}
-
 export class S3Storage implements StorageProvider {
   private bucketName: string;
   private s3Client: S3ClientType | null = null;
   private prefix?: string;
   private awsModulesLoaded = false;
-  private awsSDK: AWSSDK | null = null;
-  private uploadModule: UploadModule | null = null;
+  private awsSDK: AWSS3SDK | null = null;
+  private uploadModule: AWSS3Upload | null = null;
   private options?: S3StorageOptions;
   private region: string;
   private initPromise: Promise<void> | null = null;
@@ -78,13 +58,13 @@ export class S3Storage implements StorageProvider {
     if (this.awsModulesLoaded) return;
 
     try {
-      // Dynamically import AWS SDK modules
+      // Dynamically import AWS SDK modules using our module loaders
       try {
-        this.awsSDK = await import("@aws-sdk/client-s3");
-        this.uploadModule = await import("@aws-sdk/lib-storage");
+        this.awsSDK = await modules.aws.s3.getModule();
+        this.uploadModule = await modules.aws.upload.getModule();
       } catch (error) {
         throw new Error(
-          `Failed to load AWS SDK modules: ${error instanceof Error ? error.message : String(error)}. Please install @aws-sdk/client-s3 and @aws-sdk/lib-storage.`,
+          `Failed to load AWS SDK modules: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
 

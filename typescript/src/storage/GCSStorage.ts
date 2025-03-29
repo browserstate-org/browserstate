@@ -3,16 +3,12 @@ import type { Storage as StorageType } from "@google-cloud/storage";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
+import { modules, GCPStorage } from "../utils/DynamicImport";
 
 export interface GCSStorageOptions {
   keyFilename?: string;
   projectID?: string;
   prefix?: string;
-}
-
-// Define type for dynamic import
-interface GCPStorage {
-  Storage: typeof StorageType;
 }
 
 export class GCSStorage implements StorageProvider {
@@ -46,8 +42,8 @@ export class GCSStorage implements StorageProvider {
     if (this.gcpModulesLoaded) return;
 
     try {
-      // Dynamically import GCP Storage module
-      this.gcpSDK = (await import("@google-cloud/storage")) as GCPStorage;
+      // Dynamically import GCP Storage module using our module loader
+      this.gcpSDK = await modules.gcp.storage.getModule();
 
       const storageOptions: Record<string, unknown> = {};
 
