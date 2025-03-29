@@ -2,7 +2,7 @@ import os
 import shutil
 import logging
 from typing import List, Optional
-
+import tempfile
 import boto3
 from botocore.exceptions import ClientError
 
@@ -45,15 +45,16 @@ class S3Storage(StorageProvider):
     def _get_temp_path(self, user_id: str, session_id: str) -> str:
         """
         Get a temporary path for a session.
-        
+
         Args:
             user_id: User identifier
             session_id: Session identifier
-            
+
         Returns:
             Full path to the temporary session directory
         """
-        temp_dir = os.path.join(os.path.expandvars("$TMPDIR") or "/tmp", "browserstate", user_id)
+        
+        temp_dir = os.path.join(tempfile.gettempdir(), "browserstate", user_id)
         os.makedirs(temp_dir, exist_ok=True)
         return os.path.join(temp_dir, session_id)
     

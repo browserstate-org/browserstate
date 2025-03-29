@@ -21,7 +21,15 @@ def main():
     
     # Initialize BrowserState with local storage
     user_id = "demo_user"
-    options = BrowserStateOptions(user_id=user_id)
+
+    # Initialize Redis storage
+    redis_options = {
+        "redis_url": "redis://localhost:6379/0",
+        "key_prefix": "browserstate_demo"
+    }
+    options = BrowserStateOptions(user_id=user_id, redis_options=redis_options)
+
+    # options = BrowserStateOptions(user_id=user_id)
     browser_state = BrowserState(options)
     
     # List existing states

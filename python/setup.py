@@ -25,9 +25,11 @@ setup(
     extras_require={
         "s3": ["boto3>=1.20.0"],
         "gcs": ["google-cloud-storage>=2.0.0"],
+        "redis": ["redis>=3.5.0"],
         "all": [
             "boto3>=1.20.0",
             "google-cloud-storage>=2.0.0",
+            "redis>=3.5.0",
         ],
     },
 ) 
