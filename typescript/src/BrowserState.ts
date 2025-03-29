@@ -2,6 +2,7 @@ import { StorageProvider } from "./storage/StorageProvider";
 import { LocalStorage } from "./storage/LocalStorage";
 import { S3Storage } from "./storage/S3Storage";
 import { GCSStorage } from "./storage/GCSStorage";
+import { RedisStorageProvider, RedisStorageOptions } from "./storage/RedisStorage";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
@@ -83,7 +84,7 @@ export interface BrowserStateOptions {
   /**
    * Type of storage backend to use (default: "local")
    */
-  storageType?: "local" | "s3" | "gcs";
+  storageType?: "local" | "s3" | "gcs" | "redis";
 
   /**
    * Options for local storage
@@ -99,6 +100,11 @@ export interface BrowserStateOptions {
    * Options for Google Cloud Storage
    */
   gcsOptions?: GCSOptions;
+
+  /**
+   * Options for Redis storage
+   */
+  redisOptions?: RedisStorageOptions;
 
   /**
    * Whether to automatically clean up temporary files on process exit (default: true)
@@ -131,13 +137,17 @@ export class BrowserState {
     this.tempDir = path.join(os.tmpdir(), "browserstate", this.userId);
     fs.ensureDirSync(this.tempDir);
 
-    // Create storage provider based on options
+    // Initialize storage provider based on type
+    let provider: StorageProvider;
     switch (options.storageType) {
+      case "local":
+        provider = new LocalStorage(options.localOptions?.storagePath);
+        break;
       case "s3":
         if (!options.s3Options) {
           throw new Error("S3 options required when using s3 storage");
         }
-        this.storageProvider = new S3Storage(
+        provider = new S3Storage(
           options.s3Options.bucketName,
           options.s3Options.region,
           {
@@ -147,25 +157,27 @@ export class BrowserState {
           },
         );
         break;
-
       case "gcs":
         if (!options.gcsOptions) {
           throw new Error("GCS options required when using gcs storage");
         }
-        this.storageProvider = new GCSStorage(options.gcsOptions.bucketName, {
+        provider = new GCSStorage(options.gcsOptions.bucketName, {
           keyFilename: options.gcsOptions.keyFilename,
           projectID: options.gcsOptions.projectID,
           prefix: options.gcsOptions.prefix,
         });
         break;
-
-      case "local":
-      default:
-        this.storageProvider = new LocalStorage(
-          options.localOptions?.storagePath,
-        );
+      case "redis":
+        if (!options.redisOptions) {
+          throw new Error("Redis options required when using redis storage");
+        }
+        provider = new RedisStorageProvider(options.redisOptions);
         break;
+      default:
+        provider = new LocalStorage();
     }
+
+    this.storageProvider = provider;
 
     // Register cleanup handler for auto cleanup if enabled
     if (this.autoCleanup) {
