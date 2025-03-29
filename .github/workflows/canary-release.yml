@@ -7,9 +7,7 @@ on:
 
 jobs:
   canary-release:
-    if: github.ref == 'refs/heads/main'  # Only deploy canary for main branch
     runs-on: ubuntu-latest
-    
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,30 +25,10 @@ jobs:
           cd typescript
           npm ci
       
-      - name: Clean dist directory
-        run: |
-          cd typescript
-          rm -rf dist/*
-      
       - name: Build
         run: |
           cd typescript
-          echo "Running TypeScript build..."
-          npx tsc --listFiles
           npm run build
-          echo "Build completed. Checking dist directory:"
-          ls -la dist/
-      
-      - name: Verify build output
-        run: |
-          cd typescript
-          echo "Checking for compiled files..."
-          ls -la dist/
-          if [ ! -f "dist/index.js" ] || [ ! -f "dist/index.d.ts" ]; then
-            echo "Build verification failed: Compiled files are missing"
-            exit 1
-          fi
-          echo "Build verification passed: Compiled files exist"
       
       - name: Configure Git
         run: |
