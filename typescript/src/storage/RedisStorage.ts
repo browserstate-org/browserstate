@@ -2,9 +2,10 @@ import { StorageProvider } from "./StorageProvider";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
+import { modules } from "../utils/DynamicImport";
 
-// Define types without importing ioredis
-type RedisOptions = {
+// Define types without importing ioredis directly
+interface RedisOptions {
   host: string;
   port: number;
   password?: string;
@@ -18,28 +19,29 @@ type RedisOptions = {
   retryStrategy?: (times: number) => number;
   maxRetriesPerRequest?: number;
   enableReadyCheck?: boolean;
-};
+}
 
-type Redis = {
+// Define Redis interface for client operations
+interface RedisClient {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<"OK">;
   setex(key: string, seconds: number, value: string): Promise<"OK">;
   del(key: string): Promise<number>;
   keys(pattern: string): Promise<string[]>;
-};
+}
 
-type SessionMetadata = {
+interface SessionMetadata {
   timestamp?: number;
   fileCount?: number;
   version?: string;
-};
+}
 
 // Type for metadata created during upload
-type SessionUploadMetadata = {
+interface SessionUploadMetadata {
   timestamp: number;
   fileCount: number;
   version: string;
-};
+}
 
 /**
  * Redis Storage Architecture
@@ -158,7 +160,7 @@ export interface RedisStorageOptions {
  * It will be dynamically imported at runtime.
  */
 export class RedisStorageProvider implements StorageProvider {
-  private redis: Redis | null = null;
+  private redis: RedisClient | null = null;
   private redisModulesLoaded = false;
   private keyPrefix: string;
   private tempDir: string;
@@ -196,16 +198,8 @@ export class RedisStorageProvider implements StorageProvider {
     if (this.redisModulesLoaded) return;
 
     try {
-      // Dynamically import Redis module
-      let Redis;
-      try {
-        Redis = (await import("ioredis")).default;
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      } catch (_) {
-        throw new Error(
-          "Redis dependency not installed. Please run: npm install ioredis --save",
-        );
-      }
+      // Import Redis using our module loader
+      const Redis = await modules.redis.getModule();
 
       // Configure Redis connection
       const redisOptions: RedisOptions = {
@@ -222,7 +216,7 @@ export class RedisStorageProvider implements StorageProvider {
         enableReadyCheck: true,
       };
 
-      this.redis = new Redis(redisOptions);
+      this.redis = new Redis(redisOptions) as unknown as RedisClient;
       this.redisModulesLoaded = true;
     } catch (error) {
       this.redis = null;
@@ -321,16 +315,8 @@ export class RedisStorageProvider implements StorageProvider {
     );
 
     try {
-      // Dynamically import extract-zip
-      let extractZip;
-      try {
-        extractZip = (await import("extract-zip")).default;
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      } catch (_) {
-        throw new Error(
-          "extract-zip dependency not installed. Please run: npm install extract-zip --save",
-        );
-      }
+      // Import extract-zip using our module loader
+      const extractZip = await modules.extractZip.getModule();
 
       // Write the base64 data to a zip file
       await fs.writeFile(zipFilePath, Buffer.from(zipData, "base64"));
@@ -479,20 +465,12 @@ export class RedisStorageProvider implements StorageProvider {
     sourceDir: string,
     outPath: string,
   ): Promise<void> {
-    // Dynamically import archiver
-    let archiverModule;
-    try {
-      archiverModule = await import("archiver");
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (_) {
-      throw new Error(
-        "archiver dependency not installed. Please run: npm install archiver --save",
-      );
-    }
+    // Import archiver using our module loader
+    const archiverModule = await modules.archiver.getModule();
 
     return new Promise((resolve, reject) => {
       const output = fs.createWriteStream(outPath);
-      const archive = archiverModule.default("zip", {
+      const archive = archiverModule("zip", {
         zlib: { level: 9 }, // Maximum compression
       });
 
@@ -501,7 +479,7 @@ export class RedisStorageProvider implements StorageProvider {
         resolve();
       });
 
-      archive.on("error", (err: Error) => {
+      archive.on("error", (err?: Error) => {
         reject(err);
       });
 
@@ -535,19 +513,17 @@ export class RedisStorageProvider implements StorageProvider {
     const pattern = `${this.keyPrefix}${userId}:*`;
     const keys = await this.redis.keys(pattern);
 
-    return (
-      keys
-        .map((key: string) => {
-          const match = key.match(
-            new RegExp(`${this.keyPrefix}${userId}:(.+)$`),
-          );
-          return match ? match[1] : "";
-        })
-        .filter(Boolean)
-        // Deduplicate and filter out metadata keys
-        .filter((key) => !key.includes(":metadata"))
-        .filter((key, index, self) => self.indexOf(key) === index)
-    );
+    return keys
+      .map((key: string) => {
+        const match = key.match(new RegExp(`${this.keyPrefix}${userId}:(.+)$`));
+        return match ? match[1] : "";
+      })
+      .filter(Boolean)
+      .filter((key: string) => !key.includes(":metadata"))
+      .filter(
+        (key: string, index: number, self: string[]) =>
+          self.indexOf(key) === index,
+      );
   }
 
   /**
