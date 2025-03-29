@@ -2,8 +2,44 @@ import { StorageProvider } from "./StorageProvider";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
-import archiver from "archiver";
-import extract from "extract-zip";
+
+// Define types without importing ioredis
+type RedisOptions = {
+  host: string;
+  port: number;
+  password?: string;
+  db?: number;
+  tls?: {
+    rejectUnauthorized?: boolean;
+    ca?: string[];
+    cert?: string;
+    key?: string;
+  };
+  retryStrategy?: (times: number) => number;
+  maxRetriesPerRequest?: number;
+  enableReadyCheck?: boolean;
+};
+
+type Redis = {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<"OK">;
+  setex(key: string, seconds: number, value: string): Promise<"OK">;
+  del(key: string): Promise<number>;
+  keys(pattern: string): Promise<string[]>;
+};
+
+type SessionMetadata = {
+  timestamp?: number;
+  fileCount?: number;
+  version?: string;
+};
+
+// Type for metadata created during upload
+type SessionUploadMetadata = {
+  timestamp: number;
+  fileCount: number;
+  version: string;
+};
 
 /**
  * Redis Storage Architecture
@@ -47,44 +83,6 @@ import extract from "extract-zip";
  * - deleteSession() removes both the session data and metadata
  * - Metadata includes timestamp and version information
  */
-
-// Define types without importing ioredis
-type RedisOptions = {
-  host: string;
-  port: number;
-  password?: string;
-  db?: number;
-  tls?: {
-    rejectUnauthorized?: boolean;
-    ca?: string[];
-    cert?: string;
-    key?: string;
-  };
-  retryStrategy?: (times: number) => number;
-  maxRetriesPerRequest?: number;
-  enableReadyCheck?: boolean;
-};
-
-type Redis = {
-  get(key: string): Promise<string | null>;
-  set(key: string, value: string): Promise<"OK">;
-  setex(key: string, seconds: number, value: string): Promise<"OK">;
-  del(key: string): Promise<number>;
-  keys(pattern: string): Promise<string[]>;
-};
-
-type SessionMetadata = {
-  timestamp?: number;
-  fileCount?: number;
-  version?: string;
-};
-
-// Type for metadata created during upload
-type SessionUploadMetadata = {
-  timestamp: number;
-  fileCount: number;
-  version: string;
-};
 
 /**
  * Configuration options for Redis storage
@@ -199,7 +197,15 @@ export class RedisStorageProvider implements StorageProvider {
 
     try {
       // Dynamically import Redis module
-      const Redis = (await import("ioredis")).default;
+      let Redis;
+      try {
+        Redis = (await import("ioredis")).default;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      } catch (_) {
+        throw new Error(
+          "Redis dependency not installed. Please run: npm install ioredis --save",
+        );
+      }
 
       // Configure Redis connection
       const redisOptions: RedisOptions = {
@@ -315,12 +321,23 @@ export class RedisStorageProvider implements StorageProvider {
     );
 
     try {
+      // Dynamically import extract-zip
+      let extractZip;
+      try {
+        extractZip = (await import("extract-zip")).default;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      } catch (_) {
+        throw new Error(
+          "extract-zip dependency not installed. Please run: npm install extract-zip --save",
+        );
+      }
+
       // Write the base64 data to a zip file
       await fs.writeFile(zipFilePath, Buffer.from(zipData, "base64"));
 
       // Extract the zip file to the user data directory
       console.log(`[Redis] Extracting zip to ${userDataDir}`);
-      await extract(zipFilePath, { dir: userDataDir });
+      await extractZip(zipFilePath, { dir: userDataDir });
 
       // Clean up the temporary zip file
       await fs.remove(zipFilePath);
@@ -462,9 +479,20 @@ export class RedisStorageProvider implements StorageProvider {
     sourceDir: string,
     outPath: string,
   ): Promise<void> {
+    // Dynamically import archiver
+    let archiverModule;
+    try {
+      archiverModule = await import("archiver");
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (_) {
+      throw new Error(
+        "archiver dependency not installed. Please run: npm install archiver --save",
+      );
+    }
+
     return new Promise((resolve, reject) => {
       const output = fs.createWriteStream(outPath);
-      const archive = archiver("zip", {
+      const archive = archiverModule.default("zip", {
         zlib: { level: 9 }, // Maximum compression
       });
 
