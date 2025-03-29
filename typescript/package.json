@@ -40,7 +40,8 @@
   "author": "browserstate",
   "license": "MIT",
   "dependencies": {
-    "fs-extra": "^11.2.0"
+    "fs-extra": "^11.2.0",
+    "ioredis": "^5.3.2"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.772.0",

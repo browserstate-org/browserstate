@@ -186,8 +186,8 @@ export class RedisStorageProvider implements StorageProvider {
     const keys = await this.redis.keys(pattern);
 
     return keys
-      .filter((key) => !key.endsWith(":metadata")) // Exclude metadata keys
-      .map((key) => {
+      .filter((key: string) => !key.endsWith(":metadata")) // Exclude metadata keys
+      .map((key: string) => {
         const match = key.match(new RegExp(`${this.keyPrefix}${userId}:(.+)$`));
         return match ? match[1] : "";
       })
