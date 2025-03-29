@@ -69,14 +69,10 @@ export class RedisStorageProvider implements StorageProvider {
     return `${this.keyPrefix}${userId}:${sessionId}`;
   }
 
-  private getMetadataKey(userId: string, sessionId: string): string {
-    return `${this.keyPrefix}${userId}:${sessionId}:metadata`;
-  }
-
   async download(userId: string, sessionId: string): Promise<string> {
     const sessionKey = this.getSessionKey(userId, sessionId);
 
-    // Get session data and files
+    // Get session data
     const sessionData = await this.redis.get(sessionKey);
     if (!sessionData) {
       throw new Error(`Session ${sessionId} not found`);
@@ -118,36 +114,28 @@ export class RedisStorageProvider implements StorageProvider {
     }
 
     const sessionKey = this.getSessionKey(userId, sessionId);
-    const metadataKey = this.getMetadataKey(userId, sessionId);
 
     // Read all files from the directory
     const files: Record<string, string> = {};
-    const metadata: Record<string, { size: number; mtime: number }> = {};
 
-    await this.readDirectory(filePath, "", files, metadata);
+    await this.readDirectory(filePath, "", files);
 
     // Store in Redis with optional compression
     const sessionData = this.compression
       ? await this.compressData(JSON.stringify(files))
       : JSON.stringify(files);
 
-    const pipeline = this.redis.pipeline();
-    pipeline.set(sessionKey, sessionData);
-    pipeline.set(metadataKey, JSON.stringify(metadata));
-
     if (this.ttl) {
-      pipeline.expire(sessionKey, this.ttl);
-      pipeline.expire(metadataKey, this.ttl);
+      await this.redis.setex(sessionKey, this.ttl, sessionData);
+    } else {
+      await this.redis.set(sessionKey, sessionData);
     }
-
-    await pipeline.exec();
   }
 
   private async readDirectory(
     dirPath: string,
     relativePath: string,
     files: Record<string, string>,
-    metadata: Record<string, { size: number; mtime: number }>,
   ): Promise<void> {
     if (!dirPath) {
       throw new Error("Directory path is required");
@@ -160,7 +148,7 @@ export class RedisStorageProvider implements StorageProvider {
       const relPath = path.join(relativePath, entry.name);
 
       if (entry.isDirectory()) {
-        await this.readDirectory(fullPath, relPath, files, metadata);
+        await this.readDirectory(fullPath, relPath, files);
       } else {
         const stats = await fs.stat(fullPath);
 
@@ -171,12 +159,7 @@ export class RedisStorageProvider implements StorageProvider {
         }
 
         const content = await fs.readFile(fullPath, "utf8");
-
         files[relPath] = content;
-        metadata[relPath] = {
-          size: stats.size,
-          mtime: stats.mtimeMs,
-        };
       }
     }
   }
@@ -186,7 +169,6 @@ export class RedisStorageProvider implements StorageProvider {
     const keys = await this.redis.keys(pattern);
 
     return keys
-      .filter((key: string) => !key.endsWith(":metadata")) // Exclude metadata keys
       .map((key: string) => {
         const match = key.match(new RegExp(`${this.keyPrefix}${userId}:(.+)$`));
         return match ? match[1] : "";
@@ -196,12 +178,7 @@ export class RedisStorageProvider implements StorageProvider {
 
   async deleteSession(userId: string, sessionId: string): Promise<void> {
     const sessionKey = this.getSessionKey(userId, sessionId);
-    const metadataKey = this.getMetadataKey(userId, sessionId);
-
-    await Promise.all([
-      this.redis.del(sessionKey),
-      this.redis.del(metadataKey),
-    ]);
+    await this.redis.del(sessionKey);
   }
 
   private async compressData(data: string): Promise<string> {
