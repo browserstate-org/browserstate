@@ -1,14 +1,13 @@
 name: Canary Release
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches:
-      - main
+      - '**'  # Run on all branches
 
 jobs:
   canary-release:
-    if: github.event.pull_request.merged == true
+    if: github.ref == 'refs/heads/main'  # Only deploy canary for main branch
     runs-on: ubuntu-latest
     
     steps:
@@ -16,7 +15,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.PAT_TOKEN }}
-          ref: main
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
