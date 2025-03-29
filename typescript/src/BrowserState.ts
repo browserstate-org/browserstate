@@ -33,7 +33,7 @@ export interface S3Options {
   /**
    * AWS access key ID (optional if using environment variables or IAM roles)
    */
-  accessKeyID?: string;
+  accessKeyId?: string;
 
   /**
    * AWS secret access key (optional if using environment variables or IAM roles)
@@ -141,7 +141,7 @@ export class BrowserState {
           options.s3Options.bucketName,
           options.s3Options.region,
           {
-            accessKeyId: options.s3Options.accessKeyID,
+            accessKeyId: options.s3Options.accessKeyId,
             secretAccessKey: options.s3Options.secretAccessKey,
             prefix: options.s3Options.prefix,
           },
@@ -153,7 +153,7 @@ export class BrowserState {
           throw new Error("GCS options required when using gcs storage");
         }
         this.storageProvider = new GCSStorage(options.gcsOptions.bucketName, {
-          keyFilePath: options.gcsOptions.keyFilename,
+          keyFilename: options.gcsOptions.keyFilename,
           projectID: options.gcsOptions.projectID,
           prefix: options.gcsOptions.prefix,
         });

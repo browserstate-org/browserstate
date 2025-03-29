@@ -2,8 +2,8 @@ import { StorageProvider } from "./StorageProvider";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
-import {
-  S3Client,
+import type {
+  S3Client as S3ClientType,
   ListObjectsV2Command,
   GetObjectCommand,
   DeleteObjectsCommand,
@@ -14,7 +14,7 @@ import {
   S3ServiceException,
   _Object as S3Object,
 } from "@aws-sdk/client-s3";
-import { Upload } from "@aws-sdk/lib-storage";
+import type { Upload as UploadType } from "@aws-sdk/lib-storage";
 import { Readable } from "stream";
 
 export interface S3StorageOptions {
@@ -23,39 +23,113 @@ export interface S3StorageOptions {
   prefix?: string;
 }
 
+// Define types for dynamic imports
+interface AWSSDK {
+  S3Client: typeof S3ClientType;
+  ListObjectsV2Command: typeof ListObjectsV2Command;
+  GetObjectCommand: typeof GetObjectCommand;
+  DeleteObjectsCommand: typeof DeleteObjectsCommand;
+  HeadBucketCommand: typeof HeadBucketCommand;
+  CreateBucketCommand: typeof CreateBucketCommand;
+  S3ServiceException: typeof S3ServiceException;
+}
+
+interface UploadModule {
+  Upload: typeof UploadType;
+}
+
 export class S3Storage implements StorageProvider {
   private bucketName: string;
-  private s3Client: S3Client;
+  private s3Client: S3ClientType | null = null;
   private prefix?: string;
+  private awsModulesLoaded = false;
+  private awsSDK: AWSSDK | null = null;
+  private uploadModule: UploadModule | null = null;
+  private options?: S3StorageOptions;
+  private region: string;
+  private initPromise: Promise<void> | null = null;
 
   constructor(bucketName: string, region: string, options?: S3StorageOptions) {
     this.bucketName = bucketName;
     this.prefix = options?.prefix;
+    this.options = options;
+    this.region = region;
 
-    const clientConfig: Record<string, unknown> = { region };
+    // Start initialization immediately
+    this.initPromise = this.initClient().catch((error) => {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(
+          "[S3] Initialization failed, will retry on first usage:",
+          error,
+        );
+      }
+      throw error;
+    });
+  }
 
-    if (options?.accessKeyId && options?.secretAccessKey) {
-      clientConfig.credentials = {
-        accessKeyId: options.accessKeyId,
-        secretAccessKey: options.secretAccessKey,
-      };
+  private async ensureInitialized(): Promise<void> {
+    if (!this.initPromise) {
+      this.initPromise = this.initClient();
     }
+    await this.initPromise;
+  }
 
-    this.s3Client = new S3Client(clientConfig);
+  private async initClient(): Promise<void> {
+    if (this.awsModulesLoaded) return;
+
+    try {
+      // Dynamically import AWS SDK modules
+      try {
+        this.awsSDK = await import("@aws-sdk/client-s3");
+        this.uploadModule = await import("@aws-sdk/lib-storage");
+      } catch (error) {
+        throw new Error(
+          `Failed to load AWS SDK modules: ${error instanceof Error ? error.message : String(error)}. Please install @aws-sdk/client-s3 and @aws-sdk/lib-storage.`,
+        );
+      }
+
+      if (!this.awsSDK || !this.uploadModule) {
+        throw new Error(
+          "AWS SDK modules not properly loaded. Please check your dependencies.",
+        );
+      }
+
+      const clientConfig: Record<string, unknown> = { region: this.region };
+
+      if (this.options?.accessKeyId && this.options?.secretAccessKey) {
+        clientConfig.credentials = {
+          accessKeyId: this.options.accessKeyId,
+          secretAccessKey: this.options.secretAccessKey,
+        };
+      }
+
+      this.s3Client = new this.awsSDK.S3Client(clientConfig);
+      this.awsModulesLoaded = true;
+    } catch (error) {
+      this.s3Client = null;
+      this.awsSDK = null;
+      this.uploadModule = null;
+      throw error;
+    }
   }
 
   /**
    * Ensures the bucket exists. If it does not, creates it.
    */
   private async ensureBucketExists(): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.s3Client || !this.awsSDK) {
+      throw new Error("S3 client not initialized");
+    }
+
     try {
       await this.s3Client.send(
-        new HeadBucketCommand({ Bucket: this.bucketName }),
+        new this.awsSDK.HeadBucketCommand({ Bucket: this.bucketName }),
       );
     } catch (error: unknown) {
       // Check if error is from AWS SDK and has metadata
       if (
-        error instanceof S3ServiceException &&
+        error instanceof this.awsSDK.S3ServiceException &&
         error.$metadata?.httpStatusCode === 404
       ) {
         const region =
@@ -75,7 +149,7 @@ export class S3Storage implements StorageProvider {
           };
         }
 
-        await this.s3Client.send(new CreateBucketCommand(params));
+        await this.s3Client.send(new this.awsSDK.CreateBucketCommand(params));
       } else {
         throw error;
       }
@@ -109,6 +183,11 @@ export class S3Storage implements StorageProvider {
    * Downloads a browser session to a local directory
    */
   async download(userId: string, sessionId: string): Promise<string> {
+    await this.ensureInitialized();
+    if (!this.s3Client || !this.awsSDK) {
+      throw new Error("S3 client not initialized");
+    }
+
     const prefix = this.getSessionPrefix(userId, sessionId);
     const targetPath = this.getTempPath(userId, sessionId);
 
@@ -119,7 +198,7 @@ export class S3Storage implements StorageProvider {
 
     try {
       // List all objects with the session prefix
-      const listCommand = new ListObjectsV2Command({
+      const listCommand = new this.awsSDK.ListObjectsV2Command({
         Bucket: this.bucketName,
         Prefix: prefix,
       });
@@ -148,7 +227,7 @@ export class S3Storage implements StorageProvider {
         await fs.ensureDir(path.dirname(localFilePath));
 
         // Get the object
-        const getCommand = new GetObjectCommand({
+        const getCommand = new this.awsSDK.GetObjectCommand({
           Bucket: this.bucketName,
           Key: object.Key,
         });
@@ -188,6 +267,11 @@ export class S3Storage implements StorageProvider {
     sessionId: string,
     filePath: string,
   ): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.s3Client || !this.awsSDK || !this.uploadModule) {
+      throw new Error("S3 client not initialized");
+    }
+
     const prefix = this.getSessionPrefix(userId, sessionId);
 
     await this.ensureBucketExists();
@@ -205,7 +289,7 @@ export class S3Storage implements StorageProvider {
         const fileContent = await fs.readFile(file);
 
         // Upload the file
-        const upload = new Upload({
+        const upload = new this.uploadModule.Upload({
           client: this.s3Client,
           params: {
             Bucket: this.bucketName,
@@ -228,13 +312,18 @@ export class S3Storage implements StorageProvider {
    * Lists all available sessions for a user
    */
   async listSessions(userId: string): Promise<string[]> {
+    await this.ensureInitialized();
+    if (!this.s3Client || !this.awsSDK) {
+      throw new Error("S3 client not initialized");
+    }
+
     const prefix = this.getUserPrefix(userId);
 
     await this.ensureBucketExists();
 
     try {
       // List all objects with the user prefix and delimiter to get "directories"
-      const listCommand = new ListObjectsV2Command({
+      const listCommand = new this.awsSDK.ListObjectsV2Command({
         Bucket: this.bucketName,
         Prefix: `${prefix}/`,
         Delimiter: "/",
@@ -286,13 +375,18 @@ export class S3Storage implements StorageProvider {
    * Deletes a session
    */
   async deleteSession(userId: string, sessionId: string): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.s3Client || !this.awsSDK) {
+      throw new Error("S3 client not initialized");
+    }
+
     const prefix = this.getSessionPrefix(userId, sessionId);
 
     await this.ensureBucketExists();
 
     try {
       // List all objects with the session prefix
-      const listCommand = new ListObjectsV2Command({
+      const listCommand = new this.awsSDK.ListObjectsV2Command({
         Bucket: this.bucketName,
         Prefix: prefix,
       });
@@ -314,7 +408,7 @@ export class S3Storage implements StorageProvider {
       }
 
       // Delete objects
-      const deleteCommand = new DeleteObjectsCommand({
+      const deleteCommand = new this.awsSDK.DeleteObjectsCommand({
         Bucket: this.bucketName,
         Delete: {
           Objects: objectsToDelete,

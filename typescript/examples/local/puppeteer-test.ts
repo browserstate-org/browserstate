@@ -1,4 +1,4 @@
-import { BrowserState } from "../src";
+import { BrowserState } from "../../src";
 import puppeteer from "puppeteer"; // You'll need to install puppeteer
 
 /**
