@@ -1,6 +1,6 @@
 {
   "name": "browserstate",
-  "version": "0.2.0-canary.20250329022120",
+  "version": "0.3.0",
   "description": "Manage browser profiles across cloud storage providers",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,7 +8,7 @@
     "dist"
   ],
   "publishConfig": {
-    "tag": "canary"
+    "tag": "latest"
   },
   "scripts": {
     "build": "tsc",
