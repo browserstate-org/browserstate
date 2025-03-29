@@ -140,7 +140,7 @@ async function run() {
       
       // Wait to see the changes
       console.log('⏳ Waiting to see changes...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
       console.log('🔒 Closing browser...');
       await browser.close();
       browser = null;
@@ -155,7 +155,7 @@ async function run() {
 
       // Give Redis a moment
       console.log('⏳ Letting Redis process changes...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Second mount - should load the session with our notes
       console.log('📥 Second Mount (Load existing session from Redis)');
@@ -195,7 +195,8 @@ async function run() {
         console.log('⚠️ Could not find notes in the restored session:', error instanceof Error ? error.message : String(error));
       }
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Wait to observe the restored session
+      await new Promise(resolve => setTimeout(resolve, 4000));
 
       // Add one more note to demonstrate state persistence
       console.log('📝 Adding one more note to verify persistence...');

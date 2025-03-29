@@ -308,13 +308,13 @@ export class RedisStorageProvider implements StorageProvider {
       `[Redis] Downloading session ${sessionId} from ${new Date(sessionMetadata.timestamp || 0).toISOString()}`,
     );
 
-    try {
-      // Create a temporary zip file
-      const zipFilePath = path.join(
-        this.tempDir,
-        `${userId}-${sessionId}-${Date.now()}.zip`,
-      );
+    // Create a temporary zip file
+    const zipFilePath = path.join(
+      this.tempDir,
+      `${userId}-${sessionId}-${Date.now()}.zip`,
+    );
 
+    try {
       // Write the base64 data to a zip file
       await fs.writeFile(zipFilePath, Buffer.from(zipData, "base64"));
 
@@ -328,10 +328,34 @@ export class RedisStorageProvider implements StorageProvider {
       console.log(`[Redis] Successfully extracted session data`);
       return userDataDir;
     } catch (error) {
+      // Clean up temp zip file if it exists
+      try {
+        if (await fs.pathExists(zipFilePath)) {
+          await fs.remove(zipFilePath);
+        }
+      } catch (cleanupError) {
+        console.error(
+          `[Redis] Error cleaning up temporary zip file: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+        );
+      }
+
+      // Clean up user data directory to avoid partial extraction
+      try {
+        await fs.emptyDir(userDataDir);
+      } catch (cleanupError) {
+        console.error(
+          `[Redis] Error cleaning up user data directory: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+        );
+      }
+
       console.error(
         `[Redis] Error extracting session data: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return userDataDir;
+
+      // Propagate the error instead of hiding it
+      throw new Error(
+        `Failed to extract session data for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
