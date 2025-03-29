@@ -208,17 +208,17 @@ export class RedisStorageProvider implements StorageProvider {
     if (!this.compression) {
       return data;
     }
-    const buffer = Buffer.from(data, 'utf8');
+    const buffer = Buffer.from(data, "utf8");
     const compressed = await gzipAsync(buffer);
-    return compressed.toString('base64');
+    return compressed.toString("base64");
   }
 
   private async decompressData(data: string): Promise<string> {
     if (!this.compression) {
       return data;
     }
-    const buffer = Buffer.from(data, 'base64');
+    const buffer = Buffer.from(data, "base64");
     const decompressed = await gunzipAsync(buffer);
-    return decompressed.toString('utf8');
+    return decompressed.toString("utf8");
   }
-} 
+}
