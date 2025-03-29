@@ -29,10 +29,24 @@ jobs:
           cd typescript
           npm ci
       
+      - name: Clean dist directory
+        run: |
+          cd typescript
+          rm -rf dist/*
+      
       - name: Build
         run: |
           cd typescript
           npm run build
+      
+      - name: Verify build output
+        run: |
+          cd typescript
+          if [ ! -f "dist/index.js" ] || [ ! -f "dist/index.d.ts" ]; then
+            echo "Build verification failed: Compiled files are missing"
+            exit 1
+          fi
+          echo "Build verification passed: Compiled files exist"
       
       - name: Configure Git
         run: |
