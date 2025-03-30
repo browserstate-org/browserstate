@@ -21,7 +21,7 @@ jobs:
       run:
         working-directory: ./typescript
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -51,7 +51,7 @@ jobs:
       run:
         working-directory: ./typescript
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -71,10 +71,18 @@ jobs:
       - name: Test LocalStorage
         run: |
           node -e "
-            const { BrowserStateManager, LocalStorage } = require('./dist');
-            console.log('Successfully imported LocalStorage');
-            const storage = new LocalStorage();
-            console.log('Successfully created LocalStorage instance');
+            const { BrowserState } = require('./dist');
+            console.log('Successfully imported BrowserState');
+            
+            // Initialize with local storage (matches examples/local)
+            const browserState = new BrowserState({
+              userId: 'test-user',
+              storageType: 'local',
+              localOptions: {
+                storagePath: './browser-profiles'
+              }
+            });
+            console.log('Successfully created BrowserState with LocalStorage');
           "
 
   test-redis-storage:
@@ -85,7 +93,7 @@ jobs:
       run:
         working-directory: ./typescript
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -105,11 +113,19 @@ jobs:
       - name: Test RedisStorage
         run: |
           node -e "
-            const { BrowserStateManager, RedisStorage } = require('./dist');
-            console.log('Successfully imported RedisStorage');
-            // Just test that we can create an instance without errors
-            const storage = new RedisStorage({ host: 'localhost', port: 6379 });
-            console.log('Successfully created RedisStorage instance');
+            const { BrowserState } = require('./dist');
+            console.log('Successfully imported BrowserState');
+            
+            // Initialize with Redis storage (matches examples/redis)
+            const browserState = new BrowserState({
+              userId: 'test-user',
+              storageType: 'redis',
+              redisOptions: {
+                host: 'localhost',
+                port: 6379
+              }
+            });
+            console.log('Successfully created BrowserState with RedisStorage');
           "
   
   test-s3-storage:
@@ -120,7 +136,7 @@ jobs:
       run:
         working-directory: ./typescript
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -140,14 +156,19 @@ jobs:
       - name: Test S3Storage
         run: |
           node -e "
-            const { BrowserStateManager, S3Storage } = require('./dist');
-            console.log('Successfully imported S3Storage');
-            // Just test that we can create an instance without errors
-            const storage = new S3Storage({ 
-              region: 'us-east-1',
-              bucket: 'test-bucket'
+            const { BrowserState } = require('./dist');
+            console.log('Successfully imported BrowserState');
+            
+            // Initialize with S3 storage
+            const browserState = new BrowserState({
+              userId: 'test-user',
+              storageType: 's3',
+              s3Options: {
+                region: 'us-east-1',
+                bucket: 'test-bucket'
+              }
             });
-            console.log('Successfully created S3Storage instance');
+            console.log('Successfully created BrowserState with S3Storage');
           "
 
   test-gcs-storage:
@@ -158,7 +179,7 @@ jobs:
       run:
         working-directory: ./typescript
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -178,11 +199,16 @@ jobs:
       - name: Test GCSStorage
         run: |
           node -e "
-            const { BrowserStateManager, GCSStorage } = require('./dist');
-            console.log('Successfully imported GCSStorage');
-            // Just test that we can create an instance without errors
-            const storage = new GCSStorage({ 
-              bucketName: 'test-bucket'
+            const { BrowserState } = require('./dist');
+            console.log('Successfully imported BrowserState');
+            
+            // Initialize with GCS storage
+            const browserState = new BrowserState({
+              userId: 'test-user',
+              storageType: 'gcs',
+              gcsOptions: {
+                bucketName: 'test-bucket'
+              }
             });
-            console.log('Successfully created GCSStorage instance');
+            console.log('Successfully created BrowserState with GCSStorage');
           " 
