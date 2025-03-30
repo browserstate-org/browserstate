@@ -1,0 +1,215 @@
+name: TypeScript Dependency Isolation Tests
+
+on:
+  push:
+    branches: [ master, main ]
+    paths:
+      - 'typescript/**'
+      - '.github/workflows/typescript-dependency-isolation.yml'
+  pull_request:
+    branches: [ master, main ]
+    paths:
+      - 'typescript/**'
+      - '.github/workflows/typescript-dependency-isolation.yml'
+  workflow_dispatch:
+
+jobs:
+  test-local-storage:
+    name: Test Local Storage Only
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./typescript
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'typescript/package-lock.json'
+      
+      - name: Install minimal dependencies
+        run: |
+          # Create a minimal package.json with only required dependencies
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+            const minimalPkg = {
+              name: pkg.name,
+              version: pkg.version,
+              dependencies: {
+                'fs-extra': pkg.dependencies['fs-extra']
+              }
+            };
+            fs.writeFileSync('./minimal-pkg.json', JSON.stringify(minimalPkg, null, 2));
+          "
+          # Install only the minimal dependencies
+          mv minimal-pkg.json package.json
+          npm install
+      
+      - name: Build package
+        run: npm run build
+      
+      - name: Test LocalStorage
+        run: |
+          node -e "
+            const { BrowserStateManager, LocalStorage } = require('./dist');
+            console.log('Successfully imported LocalStorage');
+            const storage = new LocalStorage();
+            console.log('Successfully created LocalStorage instance');
+          "
+
+  test-redis-storage:
+    name: Test Redis Storage Only
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./typescript
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'typescript/package-lock.json'
+      
+      - name: Install minimal dependencies with Redis
+        run: |
+          # Create a minimal package.json with only required dependencies
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+            const minimalPkg = {
+              name: pkg.name,
+              version: pkg.version,
+              dependencies: {
+                'fs-extra': pkg.dependencies['fs-extra'],
+                'ioredis': '^5.0.0'
+              }
+            };
+            fs.writeFileSync('./minimal-pkg.json', JSON.stringify(minimalPkg, null, 2));
+          "
+          # Install only the minimal dependencies
+          mv minimal-pkg.json package.json
+          npm install
+      
+      - name: Build package
+        run: npm run build
+      
+      - name: Test RedisStorage
+        run: |
+          node -e "
+            const { BrowserStateManager, RedisStorage } = require('./dist');
+            console.log('Successfully imported RedisStorage');
+            // Just test that we can create an instance without errors
+            const storage = new RedisStorage({ host: 'localhost', port: 6379 });
+            console.log('Successfully created RedisStorage instance');
+          "
+  
+  test-s3-storage:
+    name: Test S3 Storage Only
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./typescript
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'typescript/package-lock.json'
+      
+      - name: Install minimal dependencies with S3
+        run: |
+          # Create a minimal package.json with only required dependencies
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+            const minimalPkg = {
+              name: pkg.name,
+              version: pkg.version,
+              dependencies: {
+                'fs-extra': pkg.dependencies['fs-extra'],
+                '@aws-sdk/client-s3': '^3.0.0',
+                '@aws-sdk/lib-storage': '^3.0.0'
+              }
+            };
+            fs.writeFileSync('./minimal-pkg.json', JSON.stringify(minimalPkg, null, 2));
+          "
+          # Install only the minimal dependencies
+          mv minimal-pkg.json package.json
+          npm install
+      
+      - name: Build package
+        run: npm run build
+      
+      - name: Test S3Storage
+        run: |
+          node -e "
+            const { BrowserStateManager, S3Storage } = require('./dist');
+            console.log('Successfully imported S3Storage');
+            // Just test that we can create an instance without errors
+            const storage = new S3Storage({ 
+              region: 'us-east-1',
+              bucket: 'test-bucket'
+            });
+            console.log('Successfully created S3Storage instance');
+          "
+
+  test-gcs-storage:
+    name: Test GCS Storage Only
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./typescript
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'typescript/package-lock.json'
+      
+      - name: Install minimal dependencies with GCS
+        run: |
+          # Create a minimal package.json with only required dependencies
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+            const minimalPkg = {
+              name: pkg.name,
+              version: pkg.version,
+              dependencies: {
+                'fs-extra': pkg.dependencies['fs-extra'],
+                '@google-cloud/storage': '^7.0.0'
+              }
+            };
+            fs.writeFileSync('./minimal-pkg.json', JSON.stringify(minimalPkg, null, 2));
+          "
+          # Install only the minimal dependencies
+          mv minimal-pkg.json package.json
+          npm install
+      
+      - name: Build package
+        run: npm run build
+      
+      - name: Test GCSStorage
+        run: |
+          node -e "
+            const { BrowserStateManager, GCSStorage } = require('./dist');
+            console.log('Successfully imported GCSStorage');
+            // Just test that we can create an instance without errors
+            const storage = new GCSStorage({ 
+              bucketName: 'test-bucket'
+            });
+            console.log('Successfully created GCSStorage instance');
+          " 
