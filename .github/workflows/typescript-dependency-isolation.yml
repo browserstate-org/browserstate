@@ -39,6 +39,7 @@ jobs:
             const minimalPkg = {
               name: pkg.name,
               version: pkg.version,
+              scripts: pkg.scripts,
               dependencies: {
                 'fs-extra': pkg.dependencies['fs-extra']
               }
@@ -86,6 +87,7 @@ jobs:
             const minimalPkg = {
               name: pkg.name,
               version: pkg.version,
+              scripts: pkg.scripts,
               dependencies: {
                 'fs-extra': pkg.dependencies['fs-extra'],
                 'ioredis': '^5.0.0'
@@ -135,6 +137,7 @@ jobs:
             const minimalPkg = {
               name: pkg.name,
               version: pkg.version,
+              scripts: pkg.scripts,
               dependencies: {
                 'fs-extra': pkg.dependencies['fs-extra'],
                 '@aws-sdk/client-s3': '^3.0.0',
@@ -188,6 +191,7 @@ jobs:
             const minimalPkg = {
               name: pkg.name,
               version: pkg.version,
+              scripts: pkg.scripts,
               dependencies: {
                 'fs-extra': pkg.dependencies['fs-extra'],
                 '@google-cloud/storage': '^7.0.0'
