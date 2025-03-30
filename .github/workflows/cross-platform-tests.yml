@@ -1,0 +1,116 @@
+name: Cross-Platform Tests
+
+on:
+  push:
+    branches: [ master, main ]
+    paths:
+      - 'python/**'
+      - 'typescript/**'
+      - '.github/workflows/cross-platform-tests.yml'
+  pull_request:
+    branches: [ master, main ]
+    paths:
+      - 'python/**'
+      - 'typescript/**'
+      - '.github/workflows/cross-platform-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  python-package:
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: ./python
+    strategy:
+      matrix:
+        python-version: ["3.10"]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: 'python/pyproject.toml'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build wheel
+          pip install -e ".[dev,redis,s3,gcs]"
+      
+      - name: Build package
+        run: |
+          python -m build
+      
+      - name: Basic import test
+        run: |
+          python -c "import browserstate; print(f'Successfully imported browserstate version {browserstate.__version__}')"
+      
+      - name: Run tests
+        run: |
+          python -m pytest tests/ -k "not integration"
+      
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-${{ matrix.os }}
+          path: python/dist/*
+          retention-days: 7
+
+  typescript-package:
+    name: Node.js ${{ matrix.node-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: ./typescript
+    strategy:
+      matrix:
+        node-version: [18.x]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: 'typescript/package.json'
+      
+      - name: Install dependencies
+        run: |
+          npm ci
+      
+      - name: Build package
+        run: |
+          npm run build
+      
+      - name: Run tests
+        run: |
+          npm test -- --testPathIgnorePatterns=integration
+      
+      - name: Test package installation
+        run: |
+          npm pack
+          mkdir test-install
+          cd test-install
+          npm init -y
+          npm install ../browserstate-*.tgz
+          echo "import { BrowserState } from 'browserstate';" > test.js
+          echo "console.log('Successfully imported BrowserState');" >> test.js
+          npx tsc test.js || node test.js
+      
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-package-${{ matrix.os }}
+          path: typescript/browserstate-*.tgz
+          retention-days: 7 
