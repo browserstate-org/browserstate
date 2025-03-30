@@ -20,13 +20,18 @@ jobs:
       run:
         working-directory: ./python
 
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
+      fail-fast: false
+
     steps:
     - uses: actions/checkout@v3
     
-    - name: Set up Python
+    - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
-        python-version: "3.10"
+        python-version: ${{ matrix.python-version }}
         cache: 'pip'
         cache-dependency-path: 'python/pyproject.toml'
     
@@ -44,8 +49,8 @@ jobs:
     
     - name: Upload test results
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v2
       with:
-        name: pytest-results
+        name: pytest-results-${{ matrix.python-version }}
         path: python/pytest-results.xml
         retention-days: 7 
