@@ -14,8 +14,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-local-storage:
-    name: Test Local Storage Only
+  build-full-package:
+    name: Build Full Package
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -30,42 +30,43 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'typescript/package-lock.json'
       
-      - name: Install minimal dependencies
-        run: |
-          # Create a minimal package.json with only required dependencies
-          node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-            const minimalPkg = {
-              name: pkg.name,
-              version: pkg.version,
-              scripts: pkg.scripts,
-              dependencies: {
-                'fs-extra': pkg.dependencies['fs-extra']
-              },
-              devDependencies: {
-                'typescript': pkg.devDependencies['typescript'],
-                '@types/fs-extra': pkg.devDependencies['@types/fs-extra']
-              }
-            };
-            fs.writeFileSync('./minimal-pkg.json', JSON.stringify(minimalPkg, null, 2));
-          "
-          # Install only the minimal dependencies
-          mv minimal-pkg.json package.json
-          npm install
-          npm install --save-dev ts-node @types/node
+      - name: Install all dependencies
+        run: npm ci
       
       - name: Build package
+        run: npm run build
+        
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: dist
+          path: typescript/dist/
+          retention-days: 1
+
+  test-local-storage:
+    name: Test Local Storage Only
+    runs-on: ubuntu-latest
+    needs: build-full-package
+    defaults:
+      run:
+        working-directory: ./typescript
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: typescript/dist/
+      
+      - name: Install minimal dependencies
         run: |
-          # Create a temporary tsconfig that ignores errors in unused providers
-          node -e "
-            const fs = require('fs');
-            const tsconfig = JSON.parse(fs.readFileSync('./tsconfig.json', 'utf8'));
-            tsconfig.compilerOptions.skipLibCheck = true;
-            tsconfig.compilerOptions.noEmitOnError = false;
-            fs.writeFileSync('./tsconfig.json', JSON.stringify(tsconfig, null, 2));
-          "
-          npm run build
+          npm install fs-extra
       
       - name: Test LocalStorage
         run: |
@@ -79,6 +80,7 @@ jobs:
   test-redis-storage:
     name: Test Redis Storage Only
     runs-on: ubuntu-latest
+    needs: build-full-package
     defaults:
       run:
         working-directory: ./typescript
@@ -89,47 +91,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: 'typescript/package-lock.json'
       
-      - name: Install minimal dependencies with Redis
-        run: |
-          # Create a minimal package.json with only required dependencies
-          node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-            const minimalPkg = {
-              name: pkg.name,
-              version: pkg.version,
-              scripts: pkg.scripts,
-              dependencies: {
-                'fs-extra': pkg.dependencies['fs-extra'],
-                'ioredis': '^5.0.0'
-              },
-              devDependencies: {
-                'typescript': pkg.devDependencies['typescript'],
-                '@types/fs-extra': pkg.devDependencies['@types/fs-extra'],
-                '@types/ioredis': pkg.devDependencies['@types/ioredis'] || '^5.0.0'
-              }
-            };
-            fs.writeFileSync('./minimal-pkg.json', JSON.stringify(minimalPkg, null, 2));
-          "
-          # Install only the minimal dependencies
-          mv minimal-pkg.json package.json
-          npm install
-          npm install --save-dev ts-node @types/node
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: typescript/dist/
       
-      - name: Build package
+      - name: Install minimal dependencies
         run: |
-          # Create a temporary tsconfig that ignores errors in unused providers
-          node -e "
-            const fs = require('fs');
-            const tsconfig = JSON.parse(fs.readFileSync('./tsconfig.json', 'utf8'));
-            tsconfig.compilerOptions.skipLibCheck = true;
-            tsconfig.compilerOptions.noEmitOnError = false;
-            fs.writeFileSync('./tsconfig.json', JSON.stringify(tsconfig, null, 2));
-          "
-          npm run build
+          npm install fs-extra ioredis
       
       - name: Test RedisStorage
         run: |
@@ -144,6 +115,7 @@ jobs:
   test-s3-storage:
     name: Test S3 Storage Only
     runs-on: ubuntu-latest
+    needs: build-full-package
     defaults:
       run:
         working-directory: ./typescript
@@ -154,47 +126,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: 'typescript/package-lock.json'
       
-      - name: Install minimal dependencies with S3
-        run: |
-          # Create a minimal package.json with only required dependencies
-          node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-            const minimalPkg = {
-              name: pkg.name,
-              version: pkg.version,
-              scripts: pkg.scripts,
-              dependencies: {
-                'fs-extra': pkg.dependencies['fs-extra'],
-                '@aws-sdk/client-s3': '^3.0.0',
-                '@aws-sdk/lib-storage': '^3.0.0'
-              },
-              devDependencies: {
-                'typescript': pkg.devDependencies['typescript'],
-                '@types/fs-extra': pkg.devDependencies['@types/fs-extra']
-              }
-            };
-            fs.writeFileSync('./minimal-pkg.json', JSON.stringify(minimalPkg, null, 2));
-          "
-          # Install only the minimal dependencies
-          mv minimal-pkg.json package.json
-          npm install
-          npm install --save-dev ts-node @types/node
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: typescript/dist/
       
-      - name: Build package
+      - name: Install minimal dependencies
         run: |
-          # Create a temporary tsconfig that ignores errors in unused providers
-          node -e "
-            const fs = require('fs');
-            const tsconfig = JSON.parse(fs.readFileSync('./tsconfig.json', 'utf8'));
-            tsconfig.compilerOptions.skipLibCheck = true;
-            tsconfig.compilerOptions.noEmitOnError = false;
-            fs.writeFileSync('./tsconfig.json', JSON.stringify(tsconfig, null, 2));
-          "
-          npm run build
+          npm install fs-extra @aws-sdk/client-s3 @aws-sdk/lib-storage
       
       - name: Test S3Storage
         run: |
@@ -212,6 +153,7 @@ jobs:
   test-gcs-storage:
     name: Test GCS Storage Only
     runs-on: ubuntu-latest
+    needs: build-full-package
     defaults:
       run:
         working-directory: ./typescript
@@ -222,47 +164,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: 'typescript/package-lock.json'
       
-      - name: Install minimal dependencies with GCS
-        run: |
-          # Create a minimal package.json with only required dependencies
-          node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-            const minimalPkg = {
-              name: pkg.name,
-              version: pkg.version,
-              scripts: pkg.scripts,
-              dependencies: {
-                'fs-extra': pkg.dependencies['fs-extra'],
-                '@google-cloud/storage': '^7.0.0'
-              },
-              devDependencies: {
-                'typescript': pkg.devDependencies['typescript'],
-                '@types/fs-extra': pkg.devDependencies['@types/fs-extra'],
-                '@types/google-cloud__storage': pkg.devDependencies['@types/google-cloud__storage'] || '^1.7.2'
-              }
-            };
-            fs.writeFileSync('./minimal-pkg.json', JSON.stringify(minimalPkg, null, 2));
-          "
-          # Install only the minimal dependencies
-          mv minimal-pkg.json package.json
-          npm install
-          npm install --save-dev ts-node @types/node
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: typescript/dist/
       
-      - name: Build package
+      - name: Install minimal dependencies
         run: |
-          # Create a temporary tsconfig that ignores errors in unused providers
-          node -e "
-            const fs = require('fs');
-            const tsconfig = JSON.parse(fs.readFileSync('./tsconfig.json', 'utf8'));
-            tsconfig.compilerOptions.skipLibCheck = true;
-            tsconfig.compilerOptions.noEmitOnError = false;
-            fs.writeFileSync('./tsconfig.json', JSON.stringify(tsconfig, null, 2));
-          "
-          npm run build
+          npm install fs-extra @google-cloud/storage
       
       - name: Test GCSStorage
         run: |
