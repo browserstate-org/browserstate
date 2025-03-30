@@ -37,7 +37,7 @@ jobs:
         run: npm run build
         
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v2
         with:
           name: dist
           path: typescript/dist/
@@ -59,7 +59,7 @@ jobs:
           node-version: '18'
       
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v2
         with:
           name: dist
           path: typescript/dist/
@@ -93,7 +93,7 @@ jobs:
           node-version: '18'
       
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v2
         with:
           name: dist
           path: typescript/dist/
@@ -128,7 +128,7 @@ jobs:
           node-version: '18'
       
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v2
         with:
           name: dist
           path: typescript/dist/
@@ -166,7 +166,7 @@ jobs:
           node-version: '18'
       
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v2
         with:
           name: dist
           path: typescript/dist/
