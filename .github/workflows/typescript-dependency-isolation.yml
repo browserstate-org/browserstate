@@ -89,6 +89,7 @@ jobs:
     name: Test Redis Storage Only
     runs-on: ubuntu-latest
     needs: build-full-package
+    timeout-minutes: 3
     services:
       redis:
         image: redis
@@ -137,11 +138,25 @@ jobs:
             });
             console.log('Successfully created BrowserState with RedisStorage');
             
-            // Disconnect from Redis to clean up
-            if (browserState._storage && typeof browserState._storage.disconnect === 'function') {
-              browserState._storage.disconnect();
-              console.log('Disconnected from Redis');
+            // Immediately terminate to avoid hanging connection
+            if (browserState._storage) {
+              try {
+                // Get the Redis client
+                const redisClient = browserState._storage._redisClient;
+                if (redisClient && typeof redisClient.disconnect === 'function') {
+                  redisClient.disconnect();
+                  console.log('Disconnected from Redis');
+                }
+              } catch (err) {
+                console.log('Error during cleanup:', err);
+              }
             }
+            
+            // Force exit after a short delay
+            setTimeout(() => {
+              console.log('Force exiting to prevent hanging connections');
+              process.exit(0);
+            }, 100);
           "
   
   test-s3-storage:
