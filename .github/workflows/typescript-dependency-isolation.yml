@@ -42,6 +42,10 @@ jobs:
               scripts: pkg.scripts,
               dependencies: {
                 'fs-extra': pkg.dependencies['fs-extra']
+              },
+              devDependencies: {
+                'typescript': pkg.devDependencies['typescript'],
+                '@types/fs-extra': pkg.devDependencies['@types/fs-extra']
               }
             };
             fs.writeFileSync('./minimal-pkg.json', JSON.stringify(minimalPkg, null, 2));
@@ -49,6 +53,7 @@ jobs:
           # Install only the minimal dependencies
           mv minimal-pkg.json package.json
           npm install
+          npm install --save-dev ts-node @types/node
       
       - name: Build package
         run: npm run build
@@ -91,6 +96,11 @@ jobs:
               dependencies: {
                 'fs-extra': pkg.dependencies['fs-extra'],
                 'ioredis': '^5.0.0'
+              },
+              devDependencies: {
+                'typescript': pkg.devDependencies['typescript'],
+                '@types/fs-extra': pkg.devDependencies['@types/fs-extra'],
+                '@types/ioredis': pkg.devDependencies['@types/ioredis'] || '^5.0.0'
               }
             };
             fs.writeFileSync('./minimal-pkg.json', JSON.stringify(minimalPkg, null, 2));
@@ -98,6 +108,7 @@ jobs:
           # Install only the minimal dependencies
           mv minimal-pkg.json package.json
           npm install
+          npm install --save-dev ts-node @types/node
       
       - name: Build package
         run: npm run build
@@ -142,6 +153,10 @@ jobs:
                 'fs-extra': pkg.dependencies['fs-extra'],
                 '@aws-sdk/client-s3': '^3.0.0',
                 '@aws-sdk/lib-storage': '^3.0.0'
+              },
+              devDependencies: {
+                'typescript': pkg.devDependencies['typescript'],
+                '@types/fs-extra': pkg.devDependencies['@types/fs-extra']
               }
             };
             fs.writeFileSync('./minimal-pkg.json', JSON.stringify(minimalPkg, null, 2));
@@ -149,6 +164,7 @@ jobs:
           # Install only the minimal dependencies
           mv minimal-pkg.json package.json
           npm install
+          npm install --save-dev ts-node @types/node
       
       - name: Build package
         run: npm run build
@@ -195,6 +211,11 @@ jobs:
               dependencies: {
                 'fs-extra': pkg.dependencies['fs-extra'],
                 '@google-cloud/storage': '^7.0.0'
+              },
+              devDependencies: {
+                'typescript': pkg.devDependencies['typescript'],
+                '@types/fs-extra': pkg.devDependencies['@types/fs-extra'],
+                '@types/google-cloud__storage': pkg.devDependencies['@types/google-cloud__storage'] || '^1.7.2'
               }
             };
             fs.writeFileSync('./minimal-pkg.json', JSON.stringify(minimalPkg, null, 2));
@@ -202,6 +223,7 @@ jobs:
           # Install only the minimal dependencies
           mv minimal-pkg.json package.json
           npm install
+          npm install --save-dev ts-node @types/node
       
       - name: Build package
         run: npm run build
