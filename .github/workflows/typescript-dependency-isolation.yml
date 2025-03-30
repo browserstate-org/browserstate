@@ -1,0 +1,245 @@
+name: TypeScript Dependency Isolation Tests
+
+on:
+  push:
+    branches: [ master, main ]
+    paths:
+      - 'typescript/**'
+      - '.github/workflows/typescript-dependency-isolation.yml'
+  pull_request:
+    branches: [ master, main ]
+    paths:
+      - 'typescript/**'
+      - '.github/workflows/typescript-dependency-isolation.yml'
+  workflow_dispatch:
+
+jobs:
+  build-full-package:
+    name: Build Full Package
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./typescript
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'typescript/package-lock.json'
+      
+      - name: Install all dependencies
+        run: npm ci
+      
+      - name: Build package
+        run: npm run build
+        
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: typescript/dist/
+          retention-days: 1
+
+  test-local-storage:
+    name: Test Local Storage Only
+    runs-on: ubuntu-latest
+    needs: build-full-package
+    defaults:
+      run:
+        working-directory: ./typescript
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: typescript/dist/
+      
+      - name: Install minimal dependencies
+        run: |
+          npm install fs-extra
+      
+      - name: Test LocalStorage
+        run: |
+          node -e "
+            const { BrowserState } = require('./dist');
+            console.log('Successfully imported BrowserState');
+            
+            // Initialize with local storage (matches examples/local)
+            const browserState = new BrowserState({
+              userId: 'test-user',
+              storageType: 'local',
+              localOptions: {
+                storagePath: './browser-profiles'
+              }
+            });
+            console.log('Successfully created BrowserState with LocalStorage');
+          "
+
+  test-redis-storage:
+    name: Test Redis Storage Only
+    runs-on: ubuntu-latest
+    needs: build-full-package
+    timeout-minutes: 3
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: ./typescript
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: typescript/dist/
+      
+      - name: Install minimal dependencies
+        run: |
+          npm install fs-extra ioredis
+      
+      - name: Test RedisStorage
+        run: |
+          node -e "
+            const { BrowserState } = require('./dist');
+            console.log('Successfully imported BrowserState');
+            
+            // Initialize with Redis storage (matches examples/redis)
+            const browserState = new BrowserState({
+              userId: 'test-user',
+              storageType: 'redis',
+              redisOptions: {
+                host: 'localhost',
+                port: 6379
+              }
+            });
+            console.log('Successfully created BrowserState with RedisStorage');
+            
+            // Immediately terminate to avoid hanging connection
+            if (browserState._storage) {
+              try {
+                // Get the Redis client
+                const redisClient = browserState._storage._redisClient;
+                if (redisClient && typeof redisClient.disconnect === 'function') {
+                  redisClient.disconnect();
+                  console.log('Disconnected from Redis');
+                }
+              } catch (err) {
+                console.log('Error during cleanup:', err);
+              }
+            }
+            
+            // Force exit after a short delay
+            setTimeout(() => {
+              console.log('Force exiting to prevent hanging connections');
+              process.exit(0);
+            }, 100);
+          "
+  
+  test-s3-storage:
+    name: Test S3 Storage Only
+    runs-on: ubuntu-latest
+    needs: build-full-package
+    defaults:
+      run:
+        working-directory: ./typescript
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: typescript/dist/
+      
+      - name: Install minimal dependencies
+        run: |
+          npm install fs-extra @aws-sdk/client-s3 @aws-sdk/lib-storage
+      
+      - name: Test S3Storage
+        run: |
+          node -e "
+            const { BrowserState } = require('./dist');
+            console.log('Successfully imported BrowserState');
+            
+            // Initialize with S3 storage
+            const browserState = new BrowserState({
+              userId: 'test-user',
+              storageType: 's3',
+              s3Options: {
+                region: 'us-east-1',
+                bucket: 'test-bucket'
+              }
+            });
+            console.log('Successfully created BrowserState with S3Storage');
+          "
+
+  test-gcs-storage:
+    name: Test GCS Storage Only
+    runs-on: ubuntu-latest
+    needs: build-full-package
+    defaults:
+      run:
+        working-directory: ./typescript
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: typescript/dist/
+      
+      - name: Install minimal dependencies
+        run: |
+          npm install fs-extra @google-cloud/storage
+      
+      - name: Test GCSStorage
+        run: |
+          node -e "
+            const { BrowserState } = require('./dist');
+            console.log('Successfully imported BrowserState');
+            
+            // Initialize with GCS storage
+            const browserState = new BrowserState({
+              userId: 'test-user',
+              storageType: 'gcs',
+              gcsOptions: {
+                bucketName: 'test-bucket'
+              }
+            });
+            console.log('Successfully created BrowserState with GCSStorage');
+          " 
