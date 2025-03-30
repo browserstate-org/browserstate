@@ -52,7 +52,7 @@
     "@types/extract-zip": "^2.0.0",
     "@types/fs-extra": "^11.0.4",
     "@types/google-cloud__storage": "^1.7.2",
-    "@types/jest": "^29.5.10",
+    "@types/jest": "^29.5.14",
     "@types/node": "^20.10.0",
     "@types/uuid": "^9.0.7",
     "@typescript-eslint/eslint-plugin": "^6.13.1",
@@ -73,9 +73,9 @@
     "@aws-sdk/client-s3": "^3.0.0",
     "@aws-sdk/lib-storage": "^3.0.0",
     "@google-cloud/storage": "^7.0.0",
-    "ioredis": "^5.0.0",
     "archiver": "^5.0.0",
-    "extract-zip": "^2.0.0"
+    "extract-zip": "^2.0.0",
+    "ioredis": "^5.0.0"
   },
   "peerDependenciesMeta": {
     "@aws-sdk/client-s3": {

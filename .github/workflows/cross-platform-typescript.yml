@@ -1,0 +1,69 @@
+name: TypeScript Cross-Platform Tests
+
+on:
+  push:
+    branches: [ master, main ]
+    paths:
+      - 'typescript/**'
+      - '.github/workflows/cross-platform-typescript.yml'
+  pull_request:
+    branches: [ master, main ]
+    paths:
+      - 'typescript/**'
+      - '.github/workflows/cross-platform-typescript.yml'
+  workflow_dispatch:
+
+jobs:
+  typescript-package:
+    name: Node.js ${{ matrix.node-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: ./typescript
+    strategy:
+      matrix:
+        node-version: [18.x]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: 'typescript/package.json'
+      
+      - name: Install dependencies
+        run: |
+          npm ci
+      
+      - name: Build package
+        run: |
+          npm run build
+      
+      - name: Run tests
+        run: |
+          npm test -- --testPathIgnorePatterns=integration
+      
+      - name: Test package installation
+        run: |
+          npm pack
+          mkdir test-install
+          cd test-install
+          npm init -y
+          npm install ../browserstate-*.tgz
+          echo "import { BrowserState } from 'browserstate';" > test.ts
+          echo "console.log('Successfully imported BrowserState');" >> test.ts
+          echo '{ "compilerOptions": { "target": "es2020", "module": "commonjs", "esModuleInterop": true, "allowJs": true, "outDir": "./dist" } }' > tsconfig.json
+          npx tsc
+          node dist/test.js
+      
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-package-${{ matrix.os }}
+          path: typescript/browserstate-*.tgz
+          retention-days: 7 
