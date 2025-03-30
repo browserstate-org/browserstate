@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "browserstate"
 version = "0.0.1"
 authors = [
-  { name="BrowserState Team", email="info@browserstate.app" },
+  { name="BrowserState Team", email="info@browserstate.dev" },
 ]
 description = "Manage browser profiles across cloud storage providers"
 readme = "README.md"
