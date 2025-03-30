@@ -5,6 +5,19 @@ python/examples/__init__.py
 python/browserstate/__pycache__/
 python/browserstate/storage/__pycache__/
 
+# Python testing and coverage
+.coverage
+htmlcov/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.installed.cfg
+*.egg
+
 # Dependencies
 node_modules/
 npm-debug.log*

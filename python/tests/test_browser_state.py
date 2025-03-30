@@ -147,16 +147,12 @@ def test_invalid_input_long_strings():
     options = BrowserStateOptions(user_id=user_id, local_storage_path=base_storage)
     browser_state = BrowserState(options)
 
-    with pytest.raises(OSError, match="filename, directory name, or volume label syntax is incorrect"):
+    # Different platforms will raise different error messages for long paths:
+    # Windows: "filename, directory name, or volume label syntax is incorrect"
+    # macOS/Linux: typically "File name too long"
+    # Let's catch any OSError without checking the specific message
+    with pytest.raises(OSError):
         browser_state.mount_session(session_id)
-
-    # active_session = browser_state.mount_session(session_id)
-    # assert active_session["id"] == session_id
-
-    # Do not call unmount_session() or delete_session() here for windows
-    # browser_state.unmount_session()
-    # browser_state.delete_session(session_id)
-    shutil.rmtree(base_storage, ignore_errors=True)
 
 
 # def test_concurrent_mount_unmount():

@@ -3,21 +3,45 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "example_package_YOUR_USERNAME_HERE"
+name = "browserstate"
 version = "0.0.1"
 authors = [
-  { name="Example Author", email="author@example.com" },
+  { name="BrowserState Team", email="info@browserstate.dev" },
 ]
-description = "A small example package"
+description = "Manage browser profiles across cloud storage providers"
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies = [
+    # Runtime dependencies
+]
 license = "MIT"
-license-files = ["LICEN[CS]E*"]
+license-files = ["LICENSE*"]
+
+[project.optional-dependencies]
+# Development dependencies that are not needed for runtime
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "flake8>=6.0.0",
+    "moto>=5.0.0",  # AWS mocking for tests
+]
+
+# Optional storage backend dependencies
+redis = [
+    "redis>=4.5.0",
+]
+s3 = [
+    "boto3>=1.26.0",
+]
+gcs = [
+    "google-cloud-storage>=2.7.0",
+]
 
 [project.urls]
-Homepage = "https://github.com/pypa/sampleproject"
-Issues = "https://github.com/pypa/sampleproject/issues"
+Homepage = "https://github.com/bigboateng/browserstate"
+Issues = "https://github.com/bigboateng/browserstate/issues"
