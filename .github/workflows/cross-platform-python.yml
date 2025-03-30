@@ -49,7 +49,7 @@ jobs:
       - name: Basic import test
         run: |
           python -c "import browserstate; print('Successfully imported browserstate package')"
-          python -c "import browserstate; print(f\"Version: {getattr(browserstate, '__version__', 'unknown')}\")"
+          python -c "import browserstate; print('Version: ' + getattr(browserstate, '__version__', 'unknown'))"
       
       - name: Run tests
         run: |
