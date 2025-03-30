@@ -55,9 +55,11 @@ jobs:
           cd test-install
           npm init -y
           npm install ../browserstate-*.tgz
-          echo "import { BrowserState } from 'browserstate';" > test.js
-          echo "console.log('Successfully imported BrowserState');" >> test.js
-          npx tsc test.js || node test.js
+          echo "import { BrowserState } from 'browserstate';" > test.ts
+          echo "console.log('Successfully imported BrowserState');" >> test.ts
+          echo '{ "compilerOptions": { "target": "es2020", "module": "commonjs", "esModuleInterop": true, "allowJs": true, "outDir": "./dist" } }' > tsconfig.json
+          npx tsc
+          node dist/test.js
       
       - name: Upload package artifacts
         uses: actions/upload-artifact@v4
