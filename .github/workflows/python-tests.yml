@@ -38,10 +38,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        # Install package in development mode
-        pip install -e .
-        # Install test dependencies
-        pip install -e ".[dev]"
+        # Install package with all optional dependencies
+        pip install -e ".[dev,redis,s3,gcs]"
     
     - name: Run tests
       run: |
