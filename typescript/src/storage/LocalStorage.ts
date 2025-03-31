@@ -25,7 +25,7 @@ export class LocalStorage implements StorageProvider {
    * Get path for a specific session
    */
   private getSessionPath(userId: string, sessionId: string): string {
-    return path.join(this.getUserPath(userId), sessionId);
+    return path.resolve(this.getUserPath(userId), sessionId);
   }
 
   /**

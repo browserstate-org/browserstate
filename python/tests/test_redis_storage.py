@@ -13,8 +13,15 @@ def test_redis_storage_upload_download(fake_redis, dummy_session_dir):
     
     original_file = os.path.join(dummy_session_dir, "test.txt")
     downloaded_file = os.path.join(downloaded_path, os.path.basename(dummy_session_dir), "test.txt")
-    assert os.path.exists(downloaded_file)
-    assert filecmp.cmp(original_file, downloaded_file, shallow=False)
+
+    # Based on the format, the file will be either a tar.gz or a zip
+    if storage.format == "tar.gz":
+        expected_file = os.path.join(downloaded_path, os.path.basename(dummy_session_dir), "test.txt")
+    else:  # zip format (TypeScript-compatible)
+        expected_file = os.path.join(downloaded_path, "test.txt")
+
+    assert os.path.exists(expected_file)
+    assert filecmp.cmp(original_file, expected_file, shallow=False)
     
     sessions = storage.list_sessions(user_id)
     assert session_id in sessions

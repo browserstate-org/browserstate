@@ -1,4 +1,5 @@
-import type { Redis as IoRedis } from "ioredis";
+//import type { Redis as IoRedis } from "ioredis";
+import Redis from "ioredis";
 import type { Storage as GCPStorageType } from "@google-cloud/storage";
 import type {
   S3Client,
@@ -134,19 +135,12 @@ export function createModuleLoader<T>(
 /**
  * Type definitions for commonly used optional dependencies
  */
-export type RedisType = typeof IoRedis;
-
+//export type RedisType = typeof IoRedis;
+export type RedisType = typeof Redis;
+// Type for archiver
 export interface ArchiverType {
-  (
-    format: string,
-    options?: Record<string, unknown>,
-  ): {
-    pipe(output: NodeJS.WritableStream): void;
-    on(event: string, callback: (err?: Error) => void): void;
-    directory(sourceDir: string, destDir: boolean | string): void;
-    finalize(): void;
-    pointer(): number;
-  };
+  (format: string, options?: { zlib?: { level: number } }): any;
+  create: (format: string, options?: object) => any;
 }
 
 export type ExtractZipType = (
@@ -175,6 +169,21 @@ export interface GCPStorage {
   Storage: typeof GCPStorageType;
 }
 
+// Type for TAR module
+export interface TarType {
+  create: (options: {
+    gzip: boolean;
+    file: string;
+    cwd: string;
+  }, files: string[]) => Promise<void>;
+  extract: (options: {
+    file: string;
+    cwd: string;
+    strict?: boolean;
+    filter?: (path: string) => boolean;
+  }) => Promise<void>;
+}
+
 /**
  * Pre-defined error messages for common dependencies
  */
@@ -185,6 +194,7 @@ export const DEPENDENCY_ERRORS = {
   AWS_S3:
     "Please run: npm install @aws-sdk/client-s3 @aws-sdk/lib-storage --save",
   GCS: "Please run: npm install @google-cloud/storage --save",
+  TAR: "Please run: npm install tar --save",
 };
 
 /**
@@ -199,6 +209,10 @@ export const modules = {
   extractZip: createModuleLoader<ExtractZipType>(
     "extract-zip",
     DEPENDENCY_ERRORS.EXTRACT_ZIP,
+  ),
+  tar: createModuleLoader<TarType>(
+    "tar",
+    DEPENDENCY_ERRORS.TAR,
   ),
   aws: {
     s3: createModuleLoader<AWSS3SDK>(

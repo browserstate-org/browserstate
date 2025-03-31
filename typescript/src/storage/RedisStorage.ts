@@ -34,6 +34,7 @@ interface SessionMetadata {
   timestamp?: number;
   fileCount?: number;
   version?: string;
+  format?: string;
 }
 
 // Type for metadata created during upload
@@ -41,7 +42,11 @@ interface SessionUploadMetadata {
   timestamp: number;
   fileCount: number;
   version: string;
+  format: string;
 }
+
+// Format types used for storage
+type StorageFormat = "zip" | "tar.gz";
 
 /**
  * Redis Storage Architecture
@@ -59,7 +64,7 @@ interface SessionUploadMetadata {
  *                           ┌─────────────────┐
  *                           │                 │
  *                           │  Temp Directory │
- *                           │  (ZIP Archive)  │
+ *                           │  (ZIP/TAR.GZ)   │
  *                           │                 │
  *                           └─────────────────┘
  *
@@ -68,15 +73,15 @@ interface SessionUploadMetadata {
  *
  * Upload:
  * 1. Browser state calls upload() with a directory path containing profile files
- * 2. Directory is packaged into a single ZIP archive in a temporary location
- * 3. ZIP is encoded as base64 and stored in Redis at key: {prefix}{userId}:{sessionId}
+ * 2. Directory is packaged into a single archive (ZIP or TAR.GZ) in a temporary location
+ * 3. Archive is encoded as base64 and stored in Redis at key: {prefix}{userId}:{sessionId}
  * 4. Metadata is stored separately at key: {prefix}{userId}:{sessionId}:metadata
  *
  * Download:
  * 1. Browser state calls download() with userId and sessionId
  * 2. Base64 data is fetched from Redis and decoded
- * 3. A temporary ZIP file is created from the decoded data
- * 4. ZIP is extracted to a directory that is returned to the browser state
+ * 3. Format is auto-detected (ZIP or TAR.GZ)
+ * 4. Archive is extracted to a directory that is returned to the browser state
  *
  * Session Management:
  * ------------------
@@ -84,6 +89,13 @@ interface SessionUploadMetadata {
  * - listSessions() retrieves all sessions for a user by pattern matching
  * - deleteSession() removes both the session data and metadata
  * - Metadata includes timestamp and version information
+ * 
+ *  * Enhanced Interoperability:
+ * -------------------------
+ * - Auto-detects and handles both ZIP and TAR.GZ formats for cross-language compatibility
+ * - ZIP format is the TypeScript-native format
+ * - TAR.GZ format is the Python-native format
+ * - Both formats can be read by either implementation
  */
 
 /**
@@ -125,7 +137,7 @@ export interface RedisStorageOptions {
   keyPrefix?: string;
 
   /**
-   * Temporary directory for extracting and creating ZIP archives
+   * Temporary directory for extracting and creating archives
    * @default os.tmpdir()
    */
   tempDir?: string;
@@ -136,13 +148,21 @@ export interface RedisStorageOptions {
    * @example 604800 // 7 days
    */
   ttl?: number;
+
+  /**
+   * Storage format to use for new sessions
+   * @default "zip"
+   */
+  storageFormat?: StorageFormat;
 }
 
 /**
  * Redis storage provider for BrowserState
  *
- * This implementation stores browser profiles directly in Redis as ZIP archives.
- * Unlike cloud storage providers that store individual files, this approach:
+ * This implementation stores browser profiles directly in Redis as archives.
+ * Enhanced with cross-language compatibility, supporting both:
+ * - ZIP format (TypeScript-native)
+ * - TAR.GZ format (Python-native)
  *
  * 1. Creates a complete ZIP archive of the entire browser profile directory
  * 2. Stores the archive as base64-encoded data in Redis
@@ -158,6 +178,12 @@ export interface RedisStorageOptions {
  *
  * Note: The Redis provider requires the 'ioredis' package to be installed.
  * It will be dynamically imported at runtime.
+ * 
+ *  * Features:
+ * 1. Automatic format detection for reading sessions
+ * 2. Cross-language compatibility for sessions created by either implementation
+ * 3. Customizable format for new sessions
+ * 4. Metadata storage for tracking and session management
  */
 export class RedisStorageProvider implements StorageProvider {
   private redis: RedisClient | null = null;
@@ -166,6 +192,7 @@ export class RedisStorageProvider implements StorageProvider {
   private tempDir: string;
   private ttl?: number;
   private options: RedisStorageOptions;
+  private storageFormat: StorageFormat;
 
   /**
    * Creates a new Redis storage provider instance
@@ -176,6 +203,7 @@ export class RedisStorageProvider implements StorageProvider {
     this.keyPrefix = options.keyPrefix || "browserstate:";
     this.tempDir = options.tempDir || os.tmpdir();
     this.ttl = options.ttl;
+    this.storageFormat = options.storageFormat || "zip";
     this.options = options;
 
     // Initialize with dynamic import (but don't throw if it fails)
@@ -188,7 +216,7 @@ export class RedisStorageProvider implements StorageProvider {
       }
     });
 
-    console.log(`[Redis] Storage initialized with ZIP compression`);
+    console.log(`[Redis] Storage initialized with ${this.storageFormat} compression`);
   }
 
   /**
@@ -250,12 +278,40 @@ export class RedisStorageProvider implements StorageProvider {
   }
 
   /**
+   * Detects the format of a data buffer
+   * 
+   * @param data - The data buffer to examine
+   * @returns The detected format
+   * @private
+   */
+  private detectFormat(data: Buffer): StorageFormat | "unknown" {
+    // Check if it's gzip (TAR.GZ) by examining the first bytes (gzip magic number: 0x1F8B)
+    if (data[0] === 0x1F && data[1] === 0x8B) {
+      return "tar.gz";
+    }
+
+    // Check if it's ZIP by examining the first bytes (ZIP magic number: PK\x03\x04)
+    if (
+      data.length >= 4 &&
+      data[0] === 0x50 && // P
+      data[1] === 0x4B && // K
+      data[2] === 0x03 &&
+      data[3] === 0x04
+    ) {
+      return "zip";
+    }
+
+    return "unknown";
+  }
+
+  /**
    * Downloads a browser session from Redis
    *
    * This method:
    * 1. Creates a temporary directory for the session
-   * 2. Fetches the ZIP archive from Redis
-   * 3. Extracts the archive to recreate the browser profile
+   * 2. Fetches the archive from Redis
+   * 3. Auto-detects the format (ZIP or TAR.GZ)
+   * 4. Extracts the archive to recreate the browser profile
    *
    * If the session doesn't exist, an empty directory is returned
    * which can be used to create a new session.
@@ -280,13 +336,13 @@ export class RedisStorageProvider implements StorageProvider {
     );
     await fs.ensureDir(userDataDir);
 
-    // Get session data (zipped folder) and metadata
-    const [zipData, metadata] = await Promise.all([
+    // Get session data (archive) and metadata
+    const [sessionData, metadata] = await Promise.all([
       this.redis.get(sessionKey),
       this.redis.get(metadataKey),
     ]);
 
-    if (!zipData) {
+    if (!sessionData) {
       console.log(
         `[Redis] No session data found for ${sessionId}, creating new directory`,
       );
@@ -304,44 +360,37 @@ export class RedisStorageProvider implements StorageProvider {
       );
     }
 
-    console.log(
-      `[Redis] Downloading session ${sessionId} from ${new Date(sessionMetadata.timestamp || 0).toISOString()}`,
-    );
-
-    // Create a temporary zip file
-    const zipFilePath = path.join(
-      this.tempDir,
-      `${userId}-${sessionId}-${Date.now()}.zip`,
-    );
-
     try {
-      // Import extract-zip using our module loader
-      const extractZip = await modules.extractZip.getModule();
+      // First, convert the data to a buffer
+      let dataBuffer: Buffer;
 
-      // Write the base64 data to a zip file
-      await fs.writeFile(zipFilePath, Buffer.from(zipData, "base64"));
+      // Try to parse as base64 first (common for both formats)
+      try {
+        dataBuffer = Buffer.from(sessionData, "base64");
+      } catch (error) {
+        // If not base64, use as raw data
+        dataBuffer = Buffer.from(sessionData);
+      }
 
-      // Extract the zip file to the user data directory
-      console.log(`[Redis] Extracting zip to ${userDataDir}`);
-      await extractZip(zipFilePath, { dir: userDataDir });
+      // Auto-detect the format
+      const format = sessionMetadata.format as StorageFormat ||
+        this.detectFormat(dataBuffer);
 
-      // Clean up the temporary zip file
-      await fs.remove(zipFilePath);
+      console.log(`[Redis] Detected format for session ${sessionId}: ${format}`);
+
+      if (format === "zip") {
+        // Handle ZIP format
+        await this.extractZipSession(dataBuffer, userDataDir);
+      } else if (format === "tar.gz") {
+        // Handle TAR.GZ format
+        await this.extractTarGzSession(dataBuffer, userDataDir);
+      } else {
+        throw new Error(`Unknown or unsupported format: ${format}`);
+      }
 
       console.log(`[Redis] Successfully extracted session data`);
       return userDataDir;
     } catch (error) {
-      // Clean up temp zip file if it exists
-      try {
-        if (await fs.pathExists(zipFilePath)) {
-          await fs.remove(zipFilePath);
-        }
-      } catch (cleanupError) {
-        console.error(
-          `[Redis] Error cleaning up temporary zip file: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
-        );
-      }
-
       // Clean up user data directory to avoid partial extraction
       try {
         await fs.emptyDir(userDataDir);
@@ -363,10 +412,90 @@ export class RedisStorageProvider implements StorageProvider {
   }
 
   /**
+   * Extracts a ZIP format session
+   * 
+   * @param data - ZIP data buffer
+   * @param targetDir - Directory to extract to
+   * @private
+   */
+  private async extractZipSession(data: Buffer, targetDir: string): Promise<void> {
+    const extractZip = await modules.extractZip.getModule();
+
+    // Create a temporary zip file
+    const zipFilePath = path.join(
+      this.tempDir,
+      `temp-${Date.now()}-${Math.random().toString(36).substring(2, 10)}.zip`,
+    );
+
+    try {
+      // Write the data to a zip file
+      await fs.writeFile(zipFilePath, data);
+
+      // Extract the zip file to the user data directory
+      console.log(`[Redis] Extracting zip to ${targetDir}`);
+      await extractZip(zipFilePath, { dir: targetDir });
+    } finally {
+      // Clean up the temporary zip file
+      try {
+        if (await fs.pathExists(zipFilePath)) {
+          await fs.remove(zipFilePath);
+        }
+      } catch (cleanupError) {
+        console.error(
+          `[Redis] Error cleaning up temporary zip file: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Extracts a TAR.GZ format session
+   * 
+   * @param data - TAR.GZ data buffer
+   * @param targetDir - Directory to extract to
+   * @private
+   */
+  private async extractTarGzSession(data: Buffer, targetDir: string): Promise<void> {
+    const tar = await modules.tar.getModule();
+
+    // Create a temporary tar.gz file
+    const tarFilePath = path.join(
+      this.tempDir,
+      `temp-${Date.now()}-${Math.random().toString(36).substring(2, 10)}.tar.gz`,
+    );
+
+    try {
+      // Write the data to a tar.gz file
+      await fs.writeFile(tarFilePath, data);
+
+      // Extract the tar.gz file to the user data directory
+      console.log(`[Redis] Extracting tar.gz to ${targetDir}`);
+      await tar.extract({
+        file: tarFilePath,
+        cwd: targetDir,
+        // Add safety options to prevent path traversal
+        strict: true,
+        filter: (path: string) => !path.includes(".."),
+      });
+    } finally {
+      // Clean up the temporary tar.gz file
+      try {
+        if (await fs.pathExists(tarFilePath)) {
+          await fs.remove(tarFilePath);
+        }
+      } catch (cleanupError) {
+        console.error(
+          `[Redis] Error cleaning up temporary tar.gz file: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+        );
+      }
+    }
+  }
+
+  /**
    * Uploads a browser session to Redis
    *
    * This method:
-   * 1. Creates a ZIP archive of the entire browser profile directory
+   * 1. Creates an archive (ZIP or TAR.GZ) of the entire browser profile directory
    * 2. Encodes the archive as base64 and stores it in Redis
    * 3. Stores metadata about the session alongside the data
    *
@@ -394,19 +523,78 @@ export class RedisStorageProvider implements StorageProvider {
     const sessionKey = this.getSessionKey(userId, sessionId);
     const metadataKey = this.getMetadataKey(userId, sessionId);
 
+    console.log(
+      `[Redis] Creating ${this.storageFormat} archive of session directory: ${filePath}`,
+    );
+
+    try {
+      let sessionData: string;
+      let fileSize: number;
+
+      // Create archive based on the configured format
+      if (this.storageFormat === "zip") {
+        // Create a ZIP archive
+        const result = await this.createZipArchive(filePath);
+        sessionData = result.data;
+        fileSize = result.size;
+      } else {
+        // Create a TAR.GZ archive
+        const result = await this.createTarGzArchive(filePath);
+        sessionData = result.data;
+        fileSize = result.size;
+      }
+
+      // Create metadata
+      const metadata: SessionUploadMetadata = {
+        timestamp: Date.now(),
+        fileCount: await this.countFiles(filePath),
+        version: "2.0",
+        format: this.storageFormat
+      };
+
+      console.log(
+        `[Redis] Uploading session ${sessionId} (${fileSize} bytes) in ${this.storageFormat} format`,
+      );
+
+      // Store in Redis with TTL if specified
+      if (this.ttl) {
+        await Promise.all([
+          this.redis.setex(sessionKey, this.ttl, sessionData),
+          this.redis.setex(metadataKey, this.ttl, JSON.stringify(metadata)),
+        ]);
+      } else {
+        await Promise.all([
+          this.redis.set(sessionKey, sessionData),
+          this.redis.set(metadataKey, JSON.stringify(metadata)),
+        ]);
+      }
+
+      console.log(`[Redis] Successfully uploaded session ${sessionId}`);
+    } catch (error) {
+      console.error(
+        `[Redis] Error uploading session data: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Creates a ZIP archive of a directory
+   * 
+   * @param sourceDir - Directory to compress
+   * @returns Object containing base64 data and size
+   * @private
+   */
+  private async createZipArchive(sourceDir: string): Promise<{ data: string, size: number }> {
     // Create a temporary file for the zip
     const zipFilePath = path.join(
       this.tempDir,
-      `${userId}-${sessionId}-${Date.now()}.zip`,
-    );
-
-    console.log(
-      `[Redis] Creating zip archive of session directory: ${filePath}`,
+      `temp-${Date.now()}-${Math.random().toString(36).substring(2, 10)}.zip`,
     );
 
     try {
       // Create a zip of the directory
-      await this.zipDirectory(filePath, zipFilePath);
+      await this.zipDirectory(sourceDir, zipFilePath);
 
       // Get the zip file size for logging
       const stats = await fs.stat(zipFilePath);
@@ -414,39 +602,72 @@ export class RedisStorageProvider implements StorageProvider {
       // Read the zip file as base64
       const zipData = await fs.readFile(zipFilePath, { encoding: "base64" });
 
-      // Create metadata
-      const metadata: SessionUploadMetadata = {
-        timestamp: Date.now(),
-        fileCount: 0, // We don't count individual files anymore
-        version: "2.0", // Update version to indicate zip format
+      return {
+        data: zipData,
+        size: stats.size
       };
-
-      console.log(
-        `[Redis] Uploading session ${sessionId} (${stats.size} bytes)`,
-      );
-
-      // Store in Redis with TTL if specified
-      if (this.ttl) {
-        await Promise.all([
-          this.redis.setex(sessionKey, this.ttl, zipData),
-          this.redis.setex(metadataKey, this.ttl, JSON.stringify(metadata)),
-        ]);
-      } else {
-        await Promise.all([
-          this.redis.set(sessionKey, zipData),
-          this.redis.set(metadataKey, JSON.stringify(metadata)),
-        ]);
-      }
-
-      console.log(`[Redis] Successfully uploaded session ${sessionId}`);
-
+    } finally {
       // Clean up the temporary zip file
-      await fs.remove(zipFilePath);
-    } catch (error) {
-      console.error(
-        `[Redis] Error uploading session data: ${error instanceof Error ? error.message : String(error)}`,
+      try {
+        if (await fs.pathExists(zipFilePath)) {
+          await fs.remove(zipFilePath);
+        }
+      } catch (error) {
+        console.error(
+          `[Redis] Error cleaning up temporary zip file: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Creates a TAR.GZ archive of a directory
+   * 
+   * @param sourceDir - Directory to compress
+   * @returns Object containing base64 data and size
+   * @private
+   */
+  private async createTarGzArchive(sourceDir: string): Promise<{ data: string, size: number }> {
+    const tar = await modules.tar.getModule();
+
+    // Create a temporary file for the tar.gz
+    const tarFilePath = path.join(
+      this.tempDir,
+      `temp-${Date.now()}-${Math.random().toString(36).substring(2, 10)}.tar.gz`,
+    );
+
+    try {
+      // Create a tar.gz of the directory
+      await tar.create(
+        {
+          gzip: true,
+          file: tarFilePath,
+          cwd: path.dirname(sourceDir),
+        },
+        [path.basename(sourceDir)]
       );
-      throw error;
+
+      // Get the tar.gz file size for logging
+      const stats = await fs.stat(tarFilePath);
+
+      // Read the tar.gz file as base64
+      const tarData = await fs.readFile(tarFilePath, { encoding: "base64" });
+
+      return {
+        data: tarData,
+        size: stats.size
+      };
+    } finally {
+      // Clean up the temporary tar.gz file
+      try {
+        if (await fs.pathExists(tarFilePath)) {
+          await fs.remove(tarFilePath);
+        }
+      } catch (error) {
+        console.error(
+          `[Redis] Error cleaning up temporary tar.gz file: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
   }
 
@@ -491,6 +712,32 @@ export class RedisStorageProvider implements StorageProvider {
       // Finalize the archive
       archive.finalize();
     });
+  }
+
+  /**
+   * Counts the number of files in a directory recursively
+   * 
+   * @param directory - Directory to count files in
+   * @returns Number of files
+   * @private
+   */
+  private async countFiles(directory: string): Promise<number> {
+    let count = 0;
+
+    const items = await fs.readdir(directory);
+
+    for (const item of items) {
+      const fullPath = path.join(directory, item);
+      const stats = await fs.stat(fullPath);
+
+      if (stats.isDirectory()) {
+        count += await this.countFiles(fullPath);
+      } else {
+        count++;
+      }
+    }
+
+    return count;
   }
 
   /**
