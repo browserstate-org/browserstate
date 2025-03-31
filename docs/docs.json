@@ -8,11 +8,7 @@
   "colors": {
     "primary": "#4D72F1",
     "light": "#84A9FF",
-    "dark": "#0035C7",
-    "anchors": {
-      "from": "#4D72F1",
-      "to": "#0035C7"
-    }
+    "dark": "#0035C7"
   },
   "theme": "mint",
   "topbarLinks": [
@@ -42,20 +38,16 @@
       "url": "https://browserstate.dev"
     }
   },
-  "navigation": {
-    "Getting Started": [
-      "introduction",
-      "getting-started",
-      "concept",
-      "use-cases"
-    ],
-    "Storage Providers": [
-      "providers/local",
-      "providers/redis",
-      "providers/s3",
-      "providers/gcs"
-    ]
-  },
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": ["introduction", "getting-started", "concept", "use-cases"]
+    },
+    {
+      "group": "Storage Providers",
+      "pages": ["providers/local", "providers/redis", "providers/s3", "providers/gcs"]
+    }
+  ],
   "footerSocials": {
     "github": "https://github.com/browserstate-org/browserstate"
   }
