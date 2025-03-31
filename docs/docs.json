@@ -1,4 +1,5 @@
 {
+  "$schema": "https://mintlify.com/docs.json",
   "name": "BrowserState",
   "logo": {
     "light": "/logo/light.svg",
@@ -21,33 +22,27 @@
     "name": "Get Started",
     "url": "/getting-started"
   },
-  "tabs": [
-    {
-      "name": "API Reference",
-      "url": "api-reference"
-    },
-    {
-      "name": "Examples",
-      "url": "examples"
-    }
-  ],
-  "anchors": {
-    "docs": {
-      "name": "Documentation",
-      "icon": "book-open-cover",
-      "url": "https://browserstate.dev"
-    }
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Docs",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": ["introduction", "getting-started", "concept", "use-cases"]
+          },
+          {
+            "group": "Storage Providers",
+            "pages": ["providers/local", "providers/redis", "providers/s3", "providers/gcs"]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": []
+      }
+    ]
   },
-  "navigation": [
-    {
-      "group": "Getting Started",
-      "pages": ["introduction", "getting-started", "concept", "use-cases"]
-    },
-    {
-      "group": "Storage Providers",
-      "pages": ["providers/local", "providers/redis", "providers/s3", "providers/gcs"]
-    }
-  ],
   "footerSocials": {
     "github": "https://github.com/browserstate-org/browserstate"
   }
