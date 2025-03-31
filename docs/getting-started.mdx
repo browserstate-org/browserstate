@@ -1,0 +1,154 @@
+---
+title: 'Getting Started'
+description: 'Start managing browser profiles with BrowserState in minutes'
+---
+
+# Getting Started with BrowserState
+
+This guide will help you get up and running with BrowserState quickly. You'll learn how to install the library, choose a storage provider, and begin using BrowserState in your automation workflows.
+
+## Installation
+
+Install BrowserState using your package manager of choice:
+
+```bash
+# Using npm
+npm install browserstate
+
+# Using yarn 
+yarn add browserstate
+
+# Using pnpm
+pnpm add browserstate
+```
+
+## Optional Dependencies
+
+Depending on which storage provider you plan to use, you'll need to install additional dependencies:
+
+```bash
+# For Redis storage
+npm install ioredis
+
+# For AWS S3 storage
+npm install @aws-sdk/client-s3 @aws-sdk/lib-storage
+
+# For Google Cloud Storage
+npm install @google-cloud/storage
+```
+
+## Quick Start
+
+Here's a simple example using BrowserState with Playwright and local storage:
+
+```typescript
+import { BrowserState } from 'browserstate';
+import { chromium } from 'playwright';
+
+async function main() {
+  // Initialize BrowserState with local storage
+  const browserState = new BrowserState({
+    userId: 'user123',
+    storageType: 'local',
+    localOptions: {
+      storagePath: './browser-profiles'
+    }
+  });
+
+  // Mount a session (creates one if it doesn't exist)
+  const userDataDir = await browserState.mount('my-session');
+  
+  // Launch browser with the mounted profile
+  const browser = await chromium.launchPersistentContext(userDataDir, {
+    headless: false
+  });
+  
+  // Do your automation
+  const page = await browser.newPage();
+  await page.goto('https://example.com');
+  console.log('Page title:', await page.title());
+  
+  // Close the browser
+  await browser.close();
+  
+  // Unmount to save changes
+  await browserState.unmount();
+}
+
+main().catch(console.error);
+```
+
+## Storage Providers
+
+BrowserState supports multiple storage providers to fit your specific needs:
+
+### Local Storage
+
+For development or single-machine usage. Stores browser profiles on the local file system.
+
+```typescript
+const browserState = new BrowserState({
+  userId: 'user123',
+  storageType: 'local',
+  localOptions: {
+    storagePath: './browser-profiles'
+  }
+});
+```
+
+### Redis Storage
+
+Perfect for team environments or containerized setups. Stores browser profiles in Redis.
+
+```typescript
+const browserState = new BrowserState({
+  userId: 'user123',
+  storageType: 'redis',
+  redisOptions: {
+    host: 'localhost',
+    port: 6379,
+    // password: 'your-password' // if needed
+  }
+});
+```
+
+### AWS S3 Storage
+
+For cloud-based automation. Stores browser profiles in S3 buckets.
+
+```typescript
+const browserState = new BrowserState({
+  userId: 'user123',
+  storageType: 's3',
+  s3Options: {
+    region: 'us-west-2',
+    bucket: 'my-browser-profiles',
+    // credentials can be provided here or via environment variables
+  }
+});
+```
+
+### Google Cloud Storage
+
+For Google Cloud environments. Stores browser profiles in GCS buckets.
+
+```typescript
+const browserState = new BrowserState({
+  userId: 'user123',
+  storageType: 'gcs',
+  gcsOptions: {
+    bucketName: 'my-browser-profiles',
+    // projectId and keyFilename can be provided here or via environment variables
+  }
+});
+```
+
+## Core Workflow
+
+The BrowserState workflow consists of three main steps:
+
+1. **Mount** - Prepares a session for use (downloads it if using cloud storage)
+2. **Use** - Use the mounted profile directory with your browser automation tool
+3. **Unmount** - Saves any changes back to storage and cleans up temporary files
+
+For detailed API documentation, see the [API Reference](/api-reference) section. 

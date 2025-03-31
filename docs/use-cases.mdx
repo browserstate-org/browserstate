@@ -1,0 +1,206 @@
+---
+title: 'Use Cases'
+description: 'Common scenarios and applications for BrowserState'
+---
+
+# BrowserState Use Cases
+
+BrowserState solves critical problems in browser automation. Here are the key use cases where BrowserState shines:
+
+## 🔐 Authentication Workflows
+
+One of the most common pain points in browser automation is handling authentication. With BrowserState, you can:
+
+- Authenticate once and reuse that session across environments
+- Handle complex MFA, OAuth, and SSO flows more reliably
+- Prevent repeated logins that might trigger security alerts
+- Transfer authenticated sessions between development and production
+
+```typescript
+// Log in once manually or with automation
+async function createAuthenticatedSession() {
+  const browserState = new BrowserState({...});
+  const userDataDir = await browserState.mount('auth-session');
+  
+  const browser = await chromium.launchPersistentContext(userDataDir, { headless: false });
+  const page = await browser.newPage();
+  
+  // Manual login or automated login flow
+  await page.goto('https://example.com/login');
+  // ... perform login steps
+  
+  await browser.close();
+  await browserState.unmount();
+  console.log('Authenticated session saved');
+}
+
+// Reuse the authenticated session anywhere
+async function useAuthenticatedSession() {
+  const browserState = new BrowserState({...});
+  const userDataDir = await browserState.mount('auth-session');
+  
+  // Browser launches with full authentication state
+  const browser = await chromium.launchPersistentContext(userDataDir);
+  // ... continue with authenticated operations
+}
+```
+
+## 🤖 AI Browser Agents
+
+BrowserState is ideal for AI-driven browser automation:
+
+- Let AI agents start from an authenticated human-like session
+- Maintain continuity between agent runs
+- Store the browsing context for AI to reference
+- Improve the reliability of chain-of-thought browsing operations
+
+```typescript
+// Agent framework integration example
+async function runAgentWithContext() {
+  const browserState = new BrowserState({...});
+  const userDataDir = await browserState.mount('agent-session');
+  
+  // Launch browser with persistent context
+  const browser = await chromium.launchPersistentContext(userDataDir);
+  
+  // Initialize AI agent with browser
+  const agent = new BrowserAgent({
+    browser,
+    model: 'gpt-4',
+    // other agent config
+  });
+  
+  // Run agent task with stateful browser
+  await agent.runTask('Research product pricing on authenticated dashboard');
+  
+  await browser.close();
+  await browserState.unmount();
+}
+```
+
+## 🧠 Human-in-the-Loop Automation
+
+BrowserState enables seamless transitions between human and automated actions:
+
+- Begin automated flows from where a human left off
+- Allow humans to intervene in automated workflows
+- Capture real user sessions for debugging or replication
+- Handoff between different automation processes
+
+```typescript
+// Capture a human session for automation
+async function captureHumanSession() {
+  const browserState = new BrowserState({...});
+  const userDataDir = await browserState.mount('handoff-session');
+  
+  console.log(`Please use this browser to complete initial setup steps.`);
+  console.log(`Browser profile will be saved at: ${userDataDir}`);
+  
+  const browser = await chromium.launchPersistentContext(userDataDir, { headless: false });
+  // ... human performs actions
+  
+  await browser.close();
+  await browserState.unmount();
+}
+
+// Automation continues from human session
+async function continueWithAutomation() {
+  const browserState = new BrowserState({...});
+  const userDataDir = await browserState.mount('handoff-session');
+  
+  // Automated browser picks up exactly where human left off
+  const browser = await chromium.launchPersistentContext(userDataDir);
+  // ... continue with automation
+}
+```
+
+## 🧪 Testing & Debugging
+
+BrowserState makes testing and debugging browser workflows much easier:
+
+- Reproduce stateful bugs by mounting the exact session state
+- Create standard test fixtures with pre-authenticated sessions
+- Debug production issues by capturing and transferring real user states
+- Test state-dependent features without fragile setup steps
+
+```typescript
+// Capture a problematic state for debugging
+async function captureForDebugging() {
+  const browserState = new BrowserState({...});
+  const userDataDir = await browserState.mount('debug-session');
+  
+  try {
+    // Run your automation until the problem occurs
+    // ...
+  } catch (error) {
+    console.error('Error encountered, saving session for debugging', error);
+    // The session will be saved even if there's an error
+  } finally {
+    await browserState.unmount();
+  }
+}
+
+// Debug the exact state later
+async function debugCapturedState() {
+  const browserState = new BrowserState({...});
+  const userDataDir = await browserState.mount('debug-session');
+  
+  // Launch in non-headless mode for debugging
+  const browser = await chromium.launchPersistentContext(userDataDir, { headless: false });
+  // ... debug the issue
+}
+```
+
+## 🌍 Cross-environment Automation
+
+BrowserState makes your automation portable across any infrastructure:
+
+- Run the same automation in local development, CI/CD, and production
+- Move automation between cloud providers (AWS, GCP, Azure)
+- Execute browser workflows in serverless/ephemeral environments
+- Share browser state across teams regardless of local setup
+
+```typescript
+// The same code works across any environment
+async function portableAutomation() {
+  // Configuration adapts to environment
+  const storageType = process.env.ENVIRONMENT === 'production' 
+    ? 's3' 
+    : 'local';
+  
+  const browserState = new BrowserState({
+    userId: 'system',
+    storageType,
+    // Provider-specific options configured per environment
+    ...(storageType === 's3' ? {
+      s3Options: { 
+        bucket: process.env.S3_BUCKET,
+        region: process.env.AWS_REGION
+      }
+    } : {
+      localOptions: {
+        storagePath: './browser-profiles'
+      }
+    })
+  });
+  
+  // The rest of your automation remains the same
+  const userDataDir = await browserState.mount('shared-session');
+  // ... continue with automation
+}
+```
+
+## Architecture Example
+
+```
+               [ Login Flow / Auth ]     [ Human Input Tool ]      [ Browser Agent ]
+                           \                     |                         /
+                            \                    |                        /
+                            [    BrowserState: Mounted Session Store    ]
+                                        |
+                        +--------------------------------+
+                        |     Redis / GCS / S3 Storage   |
+                        +--------------------------------+
+```
+
+By leveraging BrowserState in these scenarios, you can build more reliable, maintainable, and efficient browser automation systems that work consistently across environments. 

@@ -14,6 +14,7 @@
       "to": "#0035C7"
     }
   },
+  "theme": "mint",
   "topbarLinks": [
     {
       "name": "GitHub",
@@ -46,7 +47,9 @@
       "group": "Getting Started",
       "pages": [
         "introduction",
-        "getting-started"
+        "getting-started",
+        "concept",
+        "use-cases"
       ]
     },
     {

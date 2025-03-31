@@ -1,0 +1,133 @@
+---
+title: 'Concept & Architecture'
+description: 'Understanding how BrowserState works and its core design principles'
+---
+
+# BrowserState: Concept & Architecture
+
+## What is BrowserState?
+
+BrowserState is like **Docker for browser sessions**. It enables you to capture and reuse the complete state of a browser across different machines, environments, and automation tools.
+
+At its core, BrowserState handles the full browser profile (known as `userDataDir` in browser automation), which contains:
+
+- Cookies and session data
+- localStorage and IndexedDB contents
+- Browser fingerprinting identifiers
+- Service worker caches
+- Extension data
+- All other browser state information
+
+## The Problem BrowserState Solves
+
+Without a solution like BrowserState, browser automation faces several critical challenges:
+
+1. **Session Fragility**: Authentication tokens expire, requiring repeated logins
+
+2. **Environment Inconsistency**: Automation works on your machine but breaks in CI/CD or production
+
+3. **Bot Detection Triggers**: Each time you start a fresh browser, you appear as a new user to websites, triggering bot detection systems
+
+4. **Debugging Complexity**: It's difficult to reproduce stateful issues across environments
+
+5. **Infrastructure Dependence**: Your automation becomes tightly coupled to specific infrastructure
+
+## How BrowserState Works
+
+BrowserState follows a simple but powerful workflow:
+
+1. **Mount**: Download a session from storage (or create a new one) and prepare it for use
+2. **Use**: Launch your browser with the mounted session
+3. **Unmount**: Save any changes back to storage
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   BrowserState Core Layer                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────┐  │
+│  │ Mount/Unmount│    │ Compression │    │Session Management│  │
+│  └─────────────┘    └─────────────┘    └─────────────────┘  │
+│                                                             │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   Storage Provider Layer                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│ ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────────────┐  │
+│ │  Local  │  │  Redis  │  │   S3    │  │Google Cloud (GCS)│  │
+│ └─────────┘  └─────────┘  └─────────┘  └─────────────────┘  │
+│                                                             │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Application Layer                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│ ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────────────┐  │
+│ │Playwright│  │Puppeteer│  │Selenium │  │    AI Agents    │  │
+│ └─────────┘  └─────────┘  └─────────┘  └─────────────────┘  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Design Principles
+
+BrowserState is built on several key design principles:
+
+### 1. Full State Preservation
+
+BrowserState treats the browser profile as a black box, preserving everything without trying to pick and choose which files matter. This ensures complete compatibility across browser versions and features.
+
+### 2. Storage Flexibility
+
+The system is built with pluggable storage providers, allowing you to choose where your browser profiles are stored:
+
+- **Local Storage**: For development or single-machine usage
+- **Redis Storage**: For team environments or containerized setups 
+- **S3 Storage**: For AWS-based infrastructure
+- **GCS Storage**: For Google Cloud environments
+
+### 3. Tool Agnosticism
+
+BrowserState works with any browser automation tool that supports the `userDataDir` concept:
+
+- Playwright
+- Puppeteer
+- Selenium
+- Custom browser agents
+- Manual browsing sessions
+
+### 4. Minimal Dependencies
+
+Each storage provider has its dependencies properly isolated, so you only need to install what you use.
+
+### 5. Seamless Workflow Integration
+
+BrowserState provides a consistent interface regardless of the underlying storage technology, making it easy to switch between environments or scale your automation.
+
+## Data Flow
+
+Here's how data flows through the BrowserState system:
+
+1. **Mount**:
+   - Requests session data from storage provider
+   - Prepares a temporary directory with the session data
+   - Returns the path to use as `userDataDir`
+
+2. **Browser Usage**:
+   - Browser is launched with the provided `userDataDir`
+   - All browser operations read from and write to this directory
+   - Changes are made directly to the local file system
+
+3. **Unmount**:
+   - Compresses the modified profile (if needed)
+   - Uploads changes back to storage
+   - Cleans up temporary files
+
+This flow ensures that your browser state is consistently preserved and restored, regardless of where or how your automation runs. 
