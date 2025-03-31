@@ -35,33 +35,27 @@
       "url": "examples"
     }
   ],
-  "anchors": [
-    {
+  "anchors": {
+    "docs": {
       "name": "Documentation",
       "icon": "book-open-cover",
       "url": "https://browserstate.dev"
     }
-  ],
-  "navigation": [
-    {
-      "group": "Getting Started",
-      "pages": [
-        "introduction",
-        "getting-started",
-        "concept",
-        "use-cases"
-      ]
-    },
-    {
-      "group": "Storage Providers",
-      "pages": [
-        "providers/local",
-        "providers/redis",
-        "providers/s3",
-        "providers/gcs"
-      ]
-    }
-  ],
+  },
+  "navigation": {
+    "Getting Started": [
+      "introduction",
+      "getting-started",
+      "concept",
+      "use-cases"
+    ],
+    "Storage Providers": [
+      "providers/local",
+      "providers/redis",
+      "providers/s3",
+      "providers/gcs"
+    ]
+  },
   "footerSocials": {
     "github": "https://github.com/browserstate-org/browserstate"
   }
