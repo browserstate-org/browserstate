@@ -1,0 +1,30 @@
+---
+title: Introduction
+description: 'Manage browser profiles across different storage providers'
+---
+
+# 🌐 BrowserState
+
+BrowserState is a powerful Node.js library for managing browser profiles across different storage providers, including local storage, Redis, AWS S3, and Google Cloud Storage.
+
+## Why BrowserState?
+
+Most browser automation workflows fail because authentication and session data don't persist reliably across environments. Manually handling cookies or re-authenticating slows everything down. Worse, many automations fail due to inconsistent browser fingerprints, machine IDs, and storage states—leading to bot detection and bans.
+
+BrowserState ensures your automation behaves like a real, returning user by providing:
+
+- **Full Browser Context Restoration** – Save and restore cookies, local storage, IndexedDB, service worker caches, and extension data. Resume automation from the exact previous state.
+
+- **Multi-Instance Synchronization** – Share browser profiles across multiple servers or devices, making automation scalable and resilient.
+
+- **Zero-Setup Onboarding for Automation** – Instantly deploy automation-ready browser profiles without manual setup.
+
+- **Efficient Resource Usage** – Persistent browser usage without memory leaks, eliminating the need to launch new instances for every run.
+
+## Installation
+
+```bash
+npm install browserstate
+```
+
+For specific storage providers, you may need additional dependencies. See the [Getting Started](/getting-started) guide for details. 

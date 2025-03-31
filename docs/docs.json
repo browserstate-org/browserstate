@@ -1,0 +1,65 @@
+{
+  "name": "BrowserState",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#4D72F1",
+    "light": "#84A9FF",
+    "dark": "#0035C7",
+    "anchors": {
+      "from": "#4D72F1",
+      "to": "#0035C7"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "GitHub",
+      "url": "https://github.com/browserstate-org/browserstate"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Get Started",
+    "url": "/getting-started"
+  },
+  "tabs": [
+    {
+      "name": "API Reference",
+      "url": "api-reference"
+    },
+    {
+      "name": "Examples",
+      "url": "examples"
+    }
+  ],
+  "anchors": [
+    {
+      "name": "Documentation",
+      "icon": "book-open-cover",
+      "url": "https://browserstate.dev"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": [
+        "introduction",
+        "getting-started"
+      ]
+    },
+    {
+      "group": "Storage Providers",
+      "pages": [
+        "providers/local",
+        "providers/redis",
+        "providers/s3",
+        "providers/gcs"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "github": "https://github.com/browserstate-org/browserstate"
+  }
+} 
