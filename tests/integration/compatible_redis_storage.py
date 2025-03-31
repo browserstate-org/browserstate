@@ -1,3 +1,11 @@
+"""
+Enhanced Redis Storage with cross-format compatibility.
+
+This module provides an enhanced version of the Redis storage provider
+that can handle both Python's TAR.GZ and TypeScript's ZIP formats,
+allowing full interoperability between the implementations.
+"""
+
 import os
 import io
 import json
@@ -7,66 +15,55 @@ import tempfile
 import shutil
 import logging
 import base64
-from typing import List, Dict, Optional, Union
+from typing import List, Dict, Optional, Union, Tuple
 
-import redis  # Requires: pip install redis
+import redis
 
-from .storage_provider import StorageProvider
+from python.browserstate.storage.storage_provider import StorageProvider
 
-class RedisStorage(StorageProvider):
+class CompatibleRedisStorage(StorageProvider):
     """
-    Storage provider implementation that uses Redis to store browser sessions.
+    Enhanced Redis storage provider that supports both TAR.GZ and ZIP formats
+    for maximum interoperability between Python and TypeScript implementations.
     
-    Supports both TAR.GZ and ZIP formats for cross-implementation compatibility.
-    Can handle sessions created by both Python and TypeScript implementations.
+    Features:
+    - Auto-detection of storage format (TAR.GZ or ZIP)
+    - Supports both Python-style keys and TypeScript-style keys with metadata
+    - Can read and write sessions created by either implementation
+    - Preserves metadata when possible
+    - Improved error handling and diagnostics
     """
     
     def __init__(self, 
-                 redis_url: str = "redis://localhost:6379/0", 
-                 key_prefix: str = "browserstate",
-                 format: str = "zip"):
+                redis_url: str = "redis://localhost:6379/0", 
+                key_prefix: str = "browserstate",
+                preferred_format: str = "tar.gz"):
         """
-        Initialize RedisStorage provider.
+        Initialize the compatible Redis storage provider.
         
         Args:
-            redis_url: Redis connection URL.
-            key_prefix: Prefix to use for keys in Redis.
-            format: Format to use for storing sessions ("tar.gz" or "zip").
-                    "tar.gz" is the Python-native format
-                    "zip" is the TypeScript-compatible format
+            redis_url: Redis connection URL
+            key_prefix: Prefix to use for keys in Redis
+            preferred_format: Format to use when creating new sessions ("tar.gz" or "zip")
         """
-        if format not in ["tar.gz", "zip"]:
-            raise ValueError('format must be "tar.gz" or "zip"')
-        
+        if preferred_format not in ["tar.gz", "zip"]:
+            raise ValueError('preferred_format must be "tar.gz" or "zip"')
+            
         self.redis_client = redis.Redis.from_url(redis_url)
         self.key_prefix = key_prefix
-        self.format = format
-        self.logger = logging.getLogger("RedisStorage")
+        self.preferred_format = preferred_format
+        self.logger = logging.getLogger("CompatibleRedisStorage")
     
-    def _get_key(self, user_id: str, session_id: str) -> str:
-        """
-        Generate a Redis key for a given user and session.
-        """
+    def _get_session_key(self, user_id: str, session_id: str) -> str:
+        """Generate a Redis key for a session."""
         return f"{self.key_prefix}:{user_id}:{session_id}"
     
     def _get_metadata_key(self, user_id: str, session_id: str) -> str:
-        """
-        Generate a Redis key for session metadata.
-        Used for TypeScript compatibility.
-        """
+        """Generate a Redis key for session metadata."""
         return f"{self.key_prefix}:{user_id}:{session_id}:metadata"
     
     def _get_temp_path(self, user_id: str, session_id: str) -> str:
-        """
-        Get a temporary path for a session similar to S3Storage implementation.
-        
-        Args:
-            user_id: User identifier.
-            session_id: Session identifier.
-            
-        Returns:
-            Full path to the temporary session directory.
-        """
+        """Get a temporary path for a session."""
         temp_dir = os.path.join(tempfile.gettempdir(), "browserstate", user_id)
         os.makedirs(temp_dir, exist_ok=True)
         return os.path.join(temp_dir, session_id)
@@ -99,10 +96,8 @@ class RedisStorage(StorageProvider):
             
         return "unknown"
     
-    def _safe_extract(self, tar_obj: tarfile.TarFile, path: str) -> None:
-        """
-        Safely extract tar file to prevent path traversal vulnerabilities.
-        """
+    def _safe_extract_tar(self, tar_obj: tarfile.TarFile, path: str) -> None:
+        """Safely extract tar file to prevent path traversal vulnerabilities."""
         def is_within_directory(directory: str, target: str) -> bool:
             abs_directory = os.path.abspath(directory)
             abs_target = os.path.abspath(target)
@@ -116,23 +111,20 @@ class RedisStorage(StorageProvider):
     
     def download(self, user_id: str, session_id: str) -> str:
         """
-        Downloads a browser session from Redis, decompresses it, and writes it
-        to a local temporary directory.
-        
-        Automatically detects and handles both TAR.GZ and ZIP formats for
-        compatibility with TypeScript implementation.
+        Downloads a browser session from Redis, auto-detecting and handling
+        both TAR.GZ and ZIP formats.
         
         Args:
-            user_id: User identifier.
-            session_id: Session identifier.
+            user_id: User identifier
+            session_id: Session identifier
             
         Returns:
-            Path to the local directory containing the session data.
+            Path to the local directory containing the session data
         """
-        session_key = self._get_key(user_id, session_id)
+        session_key = self._get_session_key(user_id, session_id)
         metadata_key = self._get_metadata_key(user_id, session_id)
         
-        # Get session data
+        # Get both the session data and metadata (if available)
         session_data = self.redis_client.get(session_key)
         metadata_data = self.redis_client.get(metadata_key)
         
@@ -143,28 +135,27 @@ class RedisStorage(StorageProvider):
         os.makedirs(target_path, exist_ok=True)
         
         if session_data is None:
-            # No session found; return an empty directory.
+            # No session found; return an empty directory
             return target_path
         
-        # Parse metadata if available
         metadata = None
         if metadata_data:
             try:
                 metadata = json.loads(metadata_data)
-                self.logger.debug(f"Found metadata for session {session_id}: {metadata}")
+                self.logger.info(f"Found metadata for session {session_id}: {metadata}")
             except json.JSONDecodeError:
                 self.logger.warning(f"Failed to parse metadata for session {session_id}")
         
         # Detect format
         format_type = self._detect_format(session_data)
-        self.logger.debug(f"Detected format for session {session_id}: {format_type}")
+        self.logger.info(f"Detected format for session {session_id}: {format_type}")
         
         try:
             if format_type == "tar.gz":
                 # Handle TAR.GZ format (Python style)
                 tar_stream = io.BytesIO(session_data)
                 with tarfile.open(fileobj=tar_stream, mode="r:gz") as tar:
-                    self._safe_extract(tar, target_path)
+                    self._safe_extract_tar(tar, target_path)
             
             elif format_type == "zip":
                 # Handle ZIP format (TypeScript style)
@@ -195,27 +186,25 @@ class RedisStorage(StorageProvider):
                 
         except Exception as e:
             self.logger.error(f"Error extracting session from Redis: {e}")
+            # Don't delete the target directory - leave it as an empty dir
             raise
         
         return target_path
     
     def upload(self, user_id: str, session_id: str, file_path: str) -> None:
         """
-        Compresses the session directory and uploads it to Redis.
-        
-        Can use either TAR.GZ (Python-native) or ZIP (TypeScript-compatible) format
-        based on the 'format' parameter passed to the constructor.
+        Uploads a browser session to Redis using the preferred format.
         
         Args:
-            user_id: User identifier.
-            session_id: Session identifier.
-            file_path: Path to the local directory containing session data.
+            user_id: User identifier
+            session_id: Session identifier
+            file_path: Path to the local directory containing session data
         """
-        session_key = self._get_key(user_id, session_id)
+        session_key = self._get_session_key(user_id, session_id)
         metadata_key = self._get_metadata_key(user_id, session_id)
         
         try:
-            if self.format == "tar.gz":
+            if self.preferred_format == "tar.gz":
                 # Python-style TAR.GZ format
                 tar_stream = io.BytesIO()
                 with tarfile.open(fileobj=tar_stream, mode="w:gz") as tar:
@@ -224,6 +213,8 @@ class RedisStorage(StorageProvider):
                 session_data = tar_stream.getvalue()
                 
                 # Store the data (no separate metadata)
+                metadata = {"format": "tar.gz"}
+                self.redis_client.set(metadata_key, json.dumps(metadata))
                 self.redis_client.set(session_key, session_data)
                 
             else:  # ZIP format
@@ -247,7 +238,8 @@ class RedisStorage(StorageProvider):
                     metadata = {
                         "timestamp": int(os.path.getmtime(file_path) * 1000),  # Convert to JS timestamp
                         "fileCount": sum(len(files) for _, _, files in os.walk(file_path)),
-                        "version": "2.0"  # Version from TypeScript implementation
+                        "version": "2.0",  # Version from TypeScript implementation
+                        "format": "zip"    # Explicitly record the format
                     }
                     
                     # Store both data and metadata
@@ -267,19 +259,17 @@ class RedisStorage(StorageProvider):
         """
         Lists all available sessions for a user from Redis.
         
-        Handles sessions created by both Python and TypeScript implementations.
-        
         Args:
-            user_id: User identifier.
+            user_id: User identifier
             
         Returns:
-            List of session identifiers.
+            List of session identifiers
         """
         pattern = f"{self.key_prefix}:{user_id}:*"
         
         try:
             keys = self.redis_client.keys(pattern)
-            session_ids = set()
+            session_ids = []
             
             for key in keys:
                 key_str = key.decode('utf-8') if isinstance(key, bytes) else key
@@ -290,9 +280,9 @@ class RedisStorage(StorageProvider):
                     continue
                     
                 if len(parts) == 3:
-                    session_ids.add(parts[2])
+                    session_ids.append(parts[2])
             
-            return list(session_ids)
+            return list(set(session_ids))  # Remove duplicates
             
         except Exception as e:
             self.logger.error(f"Error listing sessions in Redis: {e}")
@@ -300,21 +290,19 @@ class RedisStorage(StorageProvider):
     
     def delete_session(self, user_id: str, session_id: str) -> None:
         """
-        Deletes a browser session from Redis.
-        
-        Deletes both the session data and metadata for TypeScript compatibility.
+        Deletes a browser session and its metadata from Redis.
         
         Args:
-            user_id: User identifier.
-            session_id: Session identifier.
+            user_id: User identifier
+            session_id: Session identifier
         """
-        session_key = self._get_key(user_id, session_id)
+        session_key = self._get_session_key(user_id, session_id)
         metadata_key = self._get_metadata_key(user_id, session_id)
         
         try:
-            # Delete both the session data and metadata
+            # Delete both session data and metadata
             self.redis_client.delete(session_key)
             self.redis_client.delete(metadata_key)
         except Exception as e:
             self.logger.error(f"Error deleting session from Redis: {e}")
-            raise
+            raise 
