@@ -1,15 +1,18 @@
 # BrowserState Interop Tests
 
-This directory contains interoperability tests between Python and TypeScript implementations of BrowserState using Redis as the storage backend.
+This directory contains interoperability tests for BrowserState:
+1. Cross-language tests between Python and TypeScript implementations using Redis as the storage backend.
+2. Cross-browser tests between different browsers (Chrome and Safari) using Redis as the storage backend.
 
 ## Directory Structure
 
 ```
 tests/interop/
-├── python-redis-typescript/  # Python -> Redis -> TypeScript tests
-├── typescript-redis-python/  # TypeScript -> Redis -> Python tests
-├── setup.sh                  # Setup script for all interop tests
-└── run_all.sh                # Run all interop tests
+├── python-redis-typescript/   # Python -> Redis -> TypeScript tests
+├── typescript-redis-python/   # TypeScript -> Redis -> Python tests
+├── chrome-redis-safari/       # Chrome -> Redis -> Safari tests
+├── setup.sh                   # Setup script for all interop tests
+└── run_all.sh                 # Run all interop tests
 ```
 
 ## Prerequisites
@@ -18,6 +21,7 @@ tests/interop/
 2. Python 3.7+
 3. Node.js with npm
 4. TypeScript and ts-node
+5. Playwright for browser automation
 
 ## Setup
 
@@ -52,8 +56,7 @@ This will:
 ## Test Structure
 
 Each test directory contains:
-- A Python script that creates/verifies browser state data
-- A TypeScript script that creates/verifies browser state data
+- Scripts that create/verify browser state data
 - A shell script (`run_tests.sh`) that orchestrates the test execution
 
 ## Cross-Language Interoperability
@@ -64,6 +67,13 @@ These tests verify that:
 2. Browser state created in TypeScript can be correctly accessed in Python
 
 The tests focus on localStorage data persistence through Redis storage.
+
+## Cross-Browser Interoperability
+
+These tests verify that:
+
+1. Browser state created in one browser can be correctly accessed in another browser
+2. Currently testing Chrome to Safari interoperability through Redis storage
 
 ## GitHub Workflow Integration
 

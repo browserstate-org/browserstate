@@ -1,0 +1,15 @@
+{
+  "name": "chrome-redis-safari-test",
+  "version": "1.0.0",
+  "description": "BrowserState cross-browser test between Chrome and Safari",
+  "type": "module",
+  "scripts": {
+    "create": "node create_state.mjs",
+    "verify": "node verify_state.mjs",
+    "test": "npm run create && npm run verify"
+  },
+  "dependencies": {
+    "fs-extra": "^11.2.0",
+    "playwright": "^1.35.1"
+  }
+}
