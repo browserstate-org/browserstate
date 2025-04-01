@@ -24,6 +24,16 @@ check_redis() {
     echo -e "${GREEN}✅ Redis is running${NC}"
 }
 
+# Activate the virtual environment
+print_header "Activating Python Environment"
+if [ -f "venv/bin/activate" ]; then
+    source venv/bin/activate
+    echo -e "${GREEN}✅ Virtual environment activated${NC}"
+else
+    echo -e "${RED}❌ Virtual environment not found. Please run the setup script first: cd .. && ./setup.sh${NC}"
+    exit 1
+fi
+
 # Function to check required dependencies
 check_dependencies() {
     print_header "Checking Required Dependencies"
