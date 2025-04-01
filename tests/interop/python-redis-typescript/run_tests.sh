@@ -74,7 +74,7 @@ echo -e "${GREEN}✅ Python test completed successfully${NC}"
 
 # Run TypeScript verification
 print_header "Running TypeScript Verification"
-if ! node --loader ts-node/esm verify_state.ts; then
+if ! npx ts-node --esm verify_state.ts; then
     echo -e "${RED}❌ TypeScript verification failed${NC}"
     exit 1
 fi
