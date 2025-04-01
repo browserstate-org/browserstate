@@ -34,7 +34,7 @@ else
     exit 1
 fi
 
-# Function to check required dependencies
+# Function to check and install required dependencies
 check_dependencies() {
     print_header "Checking Required Dependencies"
     
@@ -52,6 +52,12 @@ check_dependencies() {
         echo -e "${RED}❌ TypeScript dependencies are not installed.${NC}"
         echo -e "${RED}Please run the setup script first: cd .. && ./setup.sh${NC}"
         exit 1
+    fi
+    
+    # Ensure ioredis is installed
+    if [ ! -f "node_modules/ioredis/package.json" ]; then
+        echo -e "${BLUE}Installing ioredis...${NC}"
+        npm install ioredis
     fi
     
     echo -e "${GREEN}✅ All dependencies installed${NC}"
