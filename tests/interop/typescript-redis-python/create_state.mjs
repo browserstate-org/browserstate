@@ -12,6 +12,13 @@ import { chromium } from 'playwright';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Test constants - must match Python test
+const SESSION_ID = 'typescript_to_python_test';
+const USER_ID = 'interop_test_user';
+
+// Debug mode - set to true to see browser UI
+const DEBUG = false;
+
 // Redis configuration 
 const REDIS_CONFIG = {
     host: 'localhost',
@@ -22,8 +29,9 @@ const REDIS_CONFIG = {
     ttl: 604800  // 7 days
 };
 
-// Path to the test HTML file
-const TEST_HTML_PATH = path.join(__dirname, '../../../typescript/examples/shared/test.html');
+// Path to the test HTML file - using absolute path to ensure same origin
+const TEST_HTML_PATH = path.resolve(path.join(__dirname, '../../../typescript/examples/shared/test.html'));
+const TEST_URL = `file://${TEST_HTML_PATH}`;
 
 async function createTestData() {
     console.log('🚀 Starting TypeScript State Creation\n');
@@ -32,13 +40,10 @@ async function createTestData() {
         // Initialize BrowserState with Redis storage
         console.log('🔧 Creating BrowserState with Redis storage...');
         const browserState = new BrowserState({
-            userId: 'interop_test_user',
+            userId: USER_ID,
             storageType: 'redis',
             redisOptions: REDIS_CONFIG
         });
-
-        // Test session ID
-        const sessionId = 'typescript_to_python_test';
 
         // List existing sessions
         console.log('\n📋 Listing existing sessions...');
@@ -46,24 +51,32 @@ async function createTestData() {
         console.log(`Found ${sessions.length} session(s): ${sessions.join(', ')}`);
 
         // Mount the session
-        console.log(`\n📥 Mounting session: ${sessionId}`);
-        const userDataDir = await browserState.mount(sessionId);
+        console.log(`\n📥 Mounting session: ${SESSION_ID}`);
+        const userDataDir = await browserState.mount(SESSION_ID);
         console.log(`📂 Mounted at: ${userDataDir}`);
 
         // Launch browser with the mounted state
         console.log('\n🌐 Launching browser with Playwright...');
         const browser = await chromium.launchPersistentContext(userDataDir, {
-            headless: false
+            headless: !DEBUG
         });
 
         try {
             // Create a new page
             const page = await browser.newPage();
 
-            // Navigate to the test HTML page
-            console.log('\n📄 Loading test page...');
-            await page.goto(`file://${TEST_HTML_PATH}`);
+            // Navigate to the test HTML page - using exact same URL as Python verification
+            console.log(`\n📄 Loading test page: ${TEST_URL}`);
+            await page.goto(TEST_URL);
             console.log('✅ Test page loaded');
+            
+            // Clear existing localStorage to start fresh
+            await page.evaluate(() => {
+                localStorage.clear();
+            });
+            
+            // Wait for the page to load completely
+            await page.waitForTimeout(1000);
 
             // Add notes to localStorage
             console.log('\n📝 Adding notes to localStorage...');
@@ -90,6 +103,9 @@ async function createTestData() {
                 return localStorage.getItem('notes');
             });
             console.log(`📝 Notes data: ${notesData}`);
+            
+            // Wait to ensure data is properly saved
+            await page.waitForTimeout(1000);
 
         } finally {
             await browser.close();

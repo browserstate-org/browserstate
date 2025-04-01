@@ -13,7 +13,14 @@ import { chromium } from 'playwright';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Redis configuration matching Python example
+// Test constants - must match Python test
+const SESSION_ID = 'cross_language_test';
+const USER_ID = 'interop_test_user';
+
+// Debug mode - set to true to see browser UI
+const DEBUG = false;
+
+// Redis configuration
 const REDIS_CONFIG = {
     host: 'localhost',
     port: 6379,
@@ -23,8 +30,9 @@ const REDIS_CONFIG = {
     ttl: 604800  // 7 days
 };
 
-// Path to the test HTML file
-const TEST_HTML_PATH = path.join(__dirname, '../../../typescript/examples/shared/test.html');
+// Path to the test HTML file - using absolute path to ensure same origin
+const TEST_HTML_PATH = path.resolve(path.join(__dirname, '../../../typescript/examples/shared/test.html'));
+const TEST_URL = `file://${TEST_HTML_PATH}`;
 
 async function verifyPythonState() {
     console.log('🚀 Starting TypeScript Verification of Python State\n');
@@ -33,33 +41,33 @@ async function verifyPythonState() {
         // Initialize BrowserState with Redis storage
         console.log('🔧 Creating BrowserState with Redis storage...');
         const browserState = new BrowserState({
-            userId: 'interop_test_user',
+            userId: USER_ID,
             storageType: 'redis',
             redisOptions: REDIS_CONFIG
         });
 
-        // Test session ID
-        const sessionId = 'cross_language_test';
-
         // Mount the session
-        console.log(`\n📥 Mounting session: ${sessionId}`);
-        const userDataDir = await browserState.mount(sessionId);
+        console.log(`\n📥 Mounting session: ${SESSION_ID}`);
+        const userDataDir = await browserState.mount(SESSION_ID);
         console.log(`📂 Mounted at: ${userDataDir}`);
 
         // Launch browser with the mounted state
         console.log('\n🌐 Launching browser with Playwright...');
         const browser = await chromium.launchPersistentContext(userDataDir, {
-            headless: false
+            headless: !DEBUG
         });
 
         try {
             // Create a new page
             const page = await browser.newPage();
 
-            // Navigate to the test HTML page
-            console.log('\n📄 Loading test page...');
-            await page.goto(`file://${TEST_HTML_PATH}`);
+            // Navigate to the test HTML page - using exact same URL as Python
+            console.log(`\n📄 Loading test page: ${TEST_URL}`);
+            await page.goto(TEST_URL);
             console.log('✅ Test page loaded');
+            
+            // Wait for the page to load completely
+            await page.waitForTimeout(1000);
 
             // Get the notes data
             console.log('\n📝 Reading notes from localStorage...');
@@ -81,6 +89,21 @@ async function verifyPythonState() {
                 console.log(`\n✅ Found ${pythonNotes.length} Python-created notes`);
             } else {
                 console.log('\n❌ No notes found in localStorage');
+                
+                // Debug: check all localStorage items
+                const allItems = await page.evaluate(() => {
+                    const items = {};
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        items[key] = localStorage.getItem(key);
+                    }
+                    return items;
+                });
+                console.log('Available localStorage items:', allItems);
+                
+                // Try to examine the HTML structure
+                const html = await page.content();
+                console.log(`Page HTML (first 200 chars): ${html.substring(0, 200)}...`);
             }
 
         } finally {

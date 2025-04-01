@@ -15,18 +15,16 @@ from browserstate import BrowserState, BrowserStateOptions, RedisStorage
 REDIS_URL = "redis://localhost:6379/0"
 REDIS_KEY_PREFIX = "browserstate:"
 
-# Redis configuration matching TypeScript format - for reference only
-REDIS_CONFIG_TS = {
-    "host": "localhost",
-    "port": 6379,
-    "password": None,
-    "db": 0,
-    "keyPrefix": "browserstate:",
-    "ttl": 604800  # 7 days
-}
+# Test session ID - must be the same across Python and TypeScript
+SESSION_ID = "cross_language_test"
+USER_ID = "interop_test_user"
 
 # Path to the test HTML file
 TEST_HTML_PATH = Path(__file__).parent.parent.parent.parent / "typescript" / "examples" / "shared" / "test.html"
+TEST_URL = f"file://{TEST_HTML_PATH.absolute()}"
+
+# Debug mode - set to True to see browser UI during tests
+DEBUG = False
 
 async def create_test_data(browser_state: BrowserState, session_id: str) -> None:
     """Create test data using Playwright and store it in Redis."""
@@ -40,7 +38,7 @@ async def create_test_data(browser_state: BrowserState, session_id: str) -> None
         # Launch browser with the mounted state
         browser = await p.chromium.launch_persistent_context(
             user_data_dir=state["path"],
-            headless=False
+            headless=not DEBUG
         )
         
         try:
@@ -48,8 +46,13 @@ async def create_test_data(browser_state: BrowserState, session_id: str) -> None
             page = await browser.new_page()
             
             # Navigate to the test HTML page
-            await page.goto(f"file://{TEST_HTML_PATH}")
-            print("📄 Loaded test page")
+            print(f"📄 Loading test page: {TEST_URL}")
+            await page.goto(TEST_URL)
+            
+            # Clear existing localStorage
+            await page.evaluate("""() => {
+                localStorage.clear();
+            }""")
             
             # Add some test notes
             test_notes = [
@@ -75,6 +78,9 @@ async def create_test_data(browser_state: BrowserState, session_id: str) -> None
             }""")
             print(f"📝 Notes data: {notes_data}")
             
+            # Wait to ensure data is properly saved
+            await page.wait_for_timeout(1000)
+            
         finally:
             await browser.close()
     
@@ -94,16 +100,19 @@ async def verify_test_data(browser_state: BrowserState, session_id: str) -> None
         # Launch browser with the mounted state
         browser = await p.chromium.launch_persistent_context(
             user_data_dir=state["path"],
-            headless=False
+            headless=not DEBUG
         )
         
         try:
             # Create a new page
             page = await browser.new_page()
             
-            # Navigate to the test HTML page
-            await page.goto(f"file://{TEST_HTML_PATH}")
-            print("📄 Loaded test page")
+            # Navigate to the test HTML page - using the EXACT same URL
+            print(f"📄 Loading test page: {TEST_URL}")
+            await page.goto(TEST_URL)
+            
+            # Wait for the page to load completely
+            await page.wait_for_timeout(1000)
             
             # Get the notes data
             notes_data = await page.evaluate("""() => {
@@ -117,6 +126,16 @@ async def verify_test_data(browser_state: BrowserState, session_id: str) -> None
                     print(f"  - {note['text']} ({note['timestamp']})")
             else:
                 print("❌ No notes found in localStorage")
+                # Try to debug by looking at all localStorage items
+                storage_items = await page.evaluate("""() => {
+                    const items = {};
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        items[key] = localStorage.getItem(key);
+                    }
+                    return items;
+                }""")
+                print(f"Available localStorage items: {storage_items}")
             
         finally:
             await browser.close()
@@ -137,19 +156,16 @@ async def main():
     
     # Initialize browser state with Redis storage
     options = BrowserStateOptions(
-        user_id="interop_test_user",
+        user_id=USER_ID,
         redis_options=redis_options
     )
     browser_state = BrowserState(options)
     
-    # Test session ID
-    session_id = "cross_language_test"
-    
     # Create test data with Python
-    await create_test_data(browser_state, session_id)
+    await create_test_data(browser_state, SESSION_ID)
     
     # Verify the data can be read
-    await verify_test_data(browser_state, session_id)
+    await verify_test_data(browser_state, SESSION_ID)
     
     print("\n✨ Test completed successfully!")
 
