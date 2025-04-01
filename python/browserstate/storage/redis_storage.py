@@ -27,39 +27,26 @@ class RedisStorage(StorageProvider):
         
         Args:
             redis_url: Redis connection URL.
-            key_prefix: Prefix to use for keys in Redis.
+            key_prefix: Prefix to use for keys in Redis. Must not contain colons.
         """
+        # Validate key_prefix format
+        if ":" in key_prefix:
+            raise ValueError("key_prefix must not contain colons (:). The implementation automatically builds Redis keys in the format: {prefix}{userId}:{sessionId}")
+            
         self.redis_client = redis.Redis.from_url(redis_url)
-        
-        # Remove trailing colon if it exists to prevent double colons
-        self.key_prefix = key_prefix.rstrip(':')
+        self.key_prefix = key_prefix
         logging.info(f"Redis storage initialized with prefix: {self.key_prefix}")
     
     def _get_key(self, user_id: str, session_id: str) -> str:
-        """
-        Generate a Redis key for a given user and session.
-        """
-        # Create key with format "prefix:userId:sessionId" (ensure no double colons)
-        key = f"{self.key_prefix}:{user_id}:{session_id}"
-        return key
+        """Generate a Redis key for a given user and session."""
+        return f"{self.key_prefix}{user_id}:{session_id}"
     
     def _get_metadata_key(self, user_id: str, session_id: str) -> str:
-        """
-        Generate a Redis key for session metadata.
-        """
-        return f"{self.key_prefix}:{user_id}:{session_id}:metadata"
+        """Generate a Redis key for session metadata."""
+        return f"{self.key_prefix}{user_id}:{session_id}:metadata"
     
     def _get_temp_path(self, user_id: str, session_id: str) -> str:
-        """
-        Get a temporary path for a session.
-        
-        Args:
-            user_id: User identifier.
-            session_id: Session identifier.
-            
-        Returns:
-            Full path to the temporary session directory.
-        """
+        """Get a temporary path for a session."""
         temp_dir = os.path.join(tempfile.gettempdir(), "browserstate", user_id)
         os.makedirs(temp_dir, exist_ok=True)
         return os.path.join(temp_dir, session_id)
@@ -179,7 +166,7 @@ class RedisStorage(StorageProvider):
             # Create metadata (matching TypeScript metadata format)
             metadata = {
                 "timestamp": time.time() * 1000,  # Current time in milliseconds
-                "version": "2.0",  # Match TypeScript version
+                "version": "2.0",
             }
             
             # Store metadata in Redis
@@ -209,7 +196,7 @@ class RedisStorage(StorageProvider):
         Returns:
             List of session identifiers.
         """
-        pattern = f"{self.key_prefix}:{user_id}:*"
+        pattern = f"{self.key_prefix}{user_id}:*"
         logging.info(f"Listing sessions with pattern: {pattern}")
         
         try:
@@ -217,9 +204,13 @@ class RedisStorage(StorageProvider):
             session_ids = []
             for key in keys:
                 key_str = key.decode('utf-8') if isinstance(key, bytes) else key
-                parts = key_str.split(':')
-                if len(parts) == 3:
-                    session_ids.append(parts[2])
+                # Extract sessionId from key
+                parts = key_str[len(self.key_prefix) + len(user_id) + 1:].split(':')
+                session_id = parts[0]
+                
+                # Exclude metadata keys and deduplicate
+                if len(parts) == 1 and session_id not in session_ids:
+                    session_ids.append(session_id)
             
             logging.info(f"Found {len(session_ids)} sessions for user {user_id}")
             return session_ids

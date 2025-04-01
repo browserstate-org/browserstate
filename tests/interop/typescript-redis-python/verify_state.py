@@ -14,7 +14,7 @@ from browserstate import BrowserState, BrowserStateOptions, RedisStorage
 
 # Redis configuration for Python
 REDIS_URL = "redis://localhost:6379/0"
-REDIS_KEY_PREFIX = "browserstate:"
+REDIS_KEY_PREFIX = "browserstate"
 
 # Test constants - must match TypeScript test
 SESSION_ID = "typescript_to_python_test"

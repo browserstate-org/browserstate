@@ -25,7 +25,7 @@ const REDIS_CONFIG = {
     port: 6379,
     password: undefined, 
     db: 0,
-    keyPrefix: 'browserstate:',
+    keyPrefix: 'browserstate',
     ttl: 604800  // 7 days
 };
 
