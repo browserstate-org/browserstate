@@ -6,7 +6,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import { BrowserState } from '../../../typescript/src/BrowserState.js';
+import { BrowserState } from '../../../typescript/dist/BrowserState.js';
 import { chromium } from 'playwright';
 
 // Get current file directory with ES modules
