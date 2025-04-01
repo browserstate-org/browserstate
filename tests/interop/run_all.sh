@@ -61,6 +61,7 @@ run_test_suite "python-redis-typescript" "Python -> Redis -> TypeScript"
 run_test_suite "typescript-redis-python" "TypeScript -> Redis -> Python"
 
 print_header "Cross-Browser Interoperability Tests"
-run_test_suite "chrome-redis-safari" "Chrome -> Redis -> Safari"
+run_test_suite "typescript-chrome-redis-safari" "Chrome -> Redis -> Safari"
+run_test_suite "python-chrome-redis-safari" "Python-Chrome -> Redis -> Safari"
 
 echo -e "\n${GREEN}✨ All interop tests completed successfully!${NC}" 

@@ -55,10 +55,14 @@ print_header "Setting up BrowserState Interop Test Environment"
 # Create test directories
 mkdir -p python-redis-typescript
 mkdir -p typescript-redis-python
+mkdir -p typescript-chrome-redis-safari
+mkdir -p python-chrome-redis-safari
 
 # Setup each test directory
 setup_test_dir "python-redis-typescript" "Python -> Redis -> TypeScript"
 setup_test_dir "typescript-redis-python" "TypeScript -> Redis -> Python"
+setup_test_dir "typescript-chrome-redis-safari" "TypeScript-Chrome -> Redis -> Safari"
+setup_test_dir "python-chrome-redis-safari" "Python-Chrome -> Redis -> Safari"
 
 print_header "Setup Complete"
 echo -e "${GREEN}✅ All test environments are ready${NC}"
