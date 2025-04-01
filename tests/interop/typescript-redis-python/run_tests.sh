@@ -66,7 +66,7 @@ check_dependencies
 
 # Run TypeScript state creation
 print_header "Running TypeScript State Creation"
-if ! npx ts-node --esm create_state.ts; then
+if ! node create_state.mjs; then
     echo -e "${RED}❌ TypeScript state creation failed${NC}"
     exit 1
 fi
