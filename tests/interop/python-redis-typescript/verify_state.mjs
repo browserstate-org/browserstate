@@ -34,6 +34,12 @@ const REDIS_CONFIG = {
 const TEST_HTML_PATH = path.resolve(path.join(__dirname, '../../../typescript/examples/shared/test.html'));
 const TEST_URL = `file://${TEST_HTML_PATH}`;
 
+// Function to fail the test with a clear error message
+function failTest(message) {
+    console.error(`\n❌ TEST FAILED: ${message}`);
+    process.exit(1);
+}
+
 async function verifyPythonState() {
     console.log('🚀 Starting TypeScript Verification of Python State\n');
 
@@ -86,6 +92,11 @@ async function verifyPythonState() {
                 const pythonNotes = notes.filter((note) => 
                     note.text.startsWith('Python created note')
                 );
+                
+                if (pythonNotes.length === 0) {
+                    failTest('No Python-created notes found in localStorage');
+                }
+                
                 console.log(`\n✅ Found ${pythonNotes.length} Python-created notes`);
             } else {
                 console.log('\n❌ No notes found in localStorage');
@@ -104,6 +115,9 @@ async function verifyPythonState() {
                 // Try to examine the HTML structure
                 const html = await page.content();
                 console.log(`Page HTML (first 200 chars): ${html.substring(0, 200)}...`);
+                
+                // Fail the test
+                failTest('No notes found in localStorage');
             }
 
         } finally {
@@ -118,8 +132,7 @@ async function verifyPythonState() {
         console.log('\n✨ Verification complete!');
 
     } catch (error) {
-        console.error('\n❌ Error during verification:', error instanceof Error ? error.message : String(error));
-        process.exit(1);
+        failTest(`Error during verification: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 

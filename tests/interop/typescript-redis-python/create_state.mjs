@@ -33,6 +33,12 @@ const REDIS_CONFIG = {
 const TEST_HTML_PATH = path.resolve(path.join(__dirname, '../../../typescript/examples/shared/test.html'));
 const TEST_URL = `file://${TEST_HTML_PATH}`;
 
+// Function to fail the test with a clear error message
+function failTest(message) {
+    console.error(`\n❌ TEST FAILED: ${message}`);
+    process.exit(1);
+}
+
 async function createTestData() {
     console.log('🚀 Starting TypeScript State Creation\n');
 
@@ -96,12 +102,24 @@ async function createTestData() {
             const notesCount = await page.evaluate(() => {
                 return JSON.parse(localStorage.getItem('notes') || '[]').length;
             });
+            
+            // Verify notes were added successfully
+            if (notesCount !== testNotes.length) {
+                failTest(`Expected ${testNotes.length} notes, but found ${notesCount}`);
+            }
+            
             console.log(`✅ Added ${notesCount} notes`);
 
             // Get the notes data for verification
             const notesData = await page.evaluate(() => {
                 return localStorage.getItem('notes');
             });
+            
+            // Verify notes data is not empty
+            if (!notesData) {
+                failTest('Notes data is empty');
+            }
+            
             console.log(`📝 Notes data: ${notesData}`);
             
             // Wait to ensure data is properly saved
@@ -119,8 +137,7 @@ async function createTestData() {
         console.log('\n✨ State creation complete!');
 
     } catch (error) {
-        console.error('\n❌ Error during state creation:', error instanceof Error ? error.message : String(error));
-        process.exit(1);
+        failTest(`Error during state creation: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 

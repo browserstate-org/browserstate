@@ -7,6 +7,7 @@ This script verifies browser state created by the TypeScript implementation.
 import os
 import json
 import asyncio
+import sys
 from pathlib import Path
 from playwright.async_api import async_playwright
 from browserstate import BrowserState, BrowserStateOptions, RedisStorage
@@ -25,6 +26,11 @@ DEBUG = False
 # Path to the test HTML file - using absolute path to ensure same origin
 TEST_HTML_PATH = Path(__file__).parent.parent.parent.parent / "typescript" / "examples" / "shared" / "test.html"
 TEST_URL = f"file://{TEST_HTML_PATH.absolute()}"
+
+def fail_test(message):
+    """Fail the test with a clear error message."""
+    print(f"\n❌ TEST FAILED: {message}")
+    sys.exit(1)
 
 async def verify_typescript_state():
     """Verify the browser state created by TypeScript."""
@@ -48,8 +54,7 @@ async def verify_typescript_state():
     print(f"📋 Available sessions: {sessions}")
     
     if SESSION_ID not in sessions:
-        print(f"❌ Session '{SESSION_ID}' not found")
-        return
+        fail_test(f"Session '{SESSION_ID}' not found")
     
     # Mount the session
     state = browser_state.mount_session(SESSION_ID)
@@ -86,12 +91,11 @@ async def verify_typescript_state():
                 
                 # Verify the notes were created by TypeScript
                 typescript_notes = [note for note in notes if note['text'].startswith('TypeScript created note')]
-                if typescript_notes:
-                    print(f"✅ Found {len(typescript_notes)} TypeScript-created notes")
-                else:
-                    print("❌ No TypeScript-created notes found")
+                if not typescript_notes:
+                    fail_test("No TypeScript-created notes found")
+                
+                print(f"✅ Found {len(typescript_notes)} TypeScript-created notes")
             else:
-                print("❌ No notes found in localStorage")
                 # Try to debug by looking at all localStorage items
                 storage_items = await page.evaluate("""() => {
                     const items = {};
@@ -102,6 +106,7 @@ async def verify_typescript_state():
                     return items;
                 }""")
                 print(f"Available localStorage items: {storage_items}")
+                fail_test("No notes found in localStorage")
             
         finally:
             await browser.close()
@@ -111,4 +116,7 @@ async def verify_typescript_state():
     print("✅ Verification complete")
 
 if __name__ == "__main__":
-    asyncio.run(verify_typescript_state()) 
+    try:
+        asyncio.run(verify_typescript_state())
+    except Exception as e:
+        fail_test(f"Unexpected error: {e}") 

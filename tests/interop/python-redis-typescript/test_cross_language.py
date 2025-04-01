@@ -7,6 +7,7 @@ between Python and TypeScript implementations.
 import os
 import json
 import asyncio
+import sys
 from pathlib import Path
 from playwright.async_api import async_playwright
 from browserstate import BrowserState, BrowserStateOptions, RedisStorage
@@ -25,6 +26,11 @@ TEST_URL = f"file://{TEST_HTML_PATH.absolute()}"
 
 # Debug mode - set to True to see browser UI during tests
 DEBUG = False
+
+def fail_test(message):
+    """Fail the test with a clear error message."""
+    print(f"\n❌ TEST FAILED: {message}")
+    sys.exit(1)
 
 async def create_test_data(browser_state: BrowserState, session_id: str) -> None:
     """Create test data using Playwright and store it in Redis."""
@@ -72,11 +78,19 @@ async def create_test_data(browser_state: BrowserState, session_id: str) -> None
             }""")
             print(f"✅ Added {notes_count} notes")
             
+            # Assert that notes were actually added
+            if notes_count != len(test_notes):
+                fail_test(f"Expected {len(test_notes)} notes, but found {notes_count}")
+            
             # Get the notes data for verification
             notes_data = await page.evaluate("""() => {
                 return localStorage.getItem('notes');
             }""")
             print(f"📝 Notes data: {notes_data}")
+            
+            # Verify notes data is not empty
+            if not notes_data:
+                fail_test("Notes data is empty")
             
             # Wait to ensure data is properly saved
             await page.wait_for_timeout(1000)
@@ -124,8 +138,14 @@ async def verify_test_data(browser_state: BrowserState, session_id: str) -> None
                 print(f"📝 Found {len(notes)} notes:")
                 for note in notes:
                     print(f"  - {note['text']} ({note['timestamp']})")
+                
+                # Verify that we have Python notes
+                python_notes = [note for note in notes if note['text'].startswith('Python created note')]
+                if not python_notes:
+                    fail_test("No Python-created notes found in localStorage")
+                    
+                print(f"✅ Found {len(python_notes)} Python-created notes")
             else:
-                print("❌ No notes found in localStorage")
                 # Try to debug by looking at all localStorage items
                 storage_items = await page.evaluate("""() => {
                     const items = {};
@@ -136,6 +156,7 @@ async def verify_test_data(browser_state: BrowserState, session_id: str) -> None
                     return items;
                 }""")
                 print(f"Available localStorage items: {storage_items}")
+                fail_test("No notes found in localStorage")
             
         finally:
             await browser.close()
