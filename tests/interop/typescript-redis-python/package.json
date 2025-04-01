@@ -9,5 +9,8 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "This test verifies the cross-language interoperability between TypeScript and Python implementations of BrowserState using Redis as the storage backend."
+  "description": "This test verifies the cross-language interoperability between TypeScript and Python implementations of BrowserState using Redis as the storage backend.",
+  "dependencies": {
+    "ioredis": "^5.6.0"
+  }
 }
