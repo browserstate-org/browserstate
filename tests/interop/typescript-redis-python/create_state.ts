@@ -4,8 +4,13 @@
  */
 
 import path from 'path';
-import { BrowserState } from '../../../typescript/src/BrowserState';
+import { fileURLToPath } from 'url';
+import { BrowserState } from '../../../typescript/src/BrowserState.js';
 import { chromium } from 'playwright';
+
+// Get current file directory with ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Redis configuration 
 const REDIS_CONFIG = {

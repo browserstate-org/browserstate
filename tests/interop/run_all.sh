@@ -32,17 +32,16 @@ run_test_suite() {
     
     cd "$dir"
     
-    # Activate Python virtual environment
-    source venv/bin/activate
-    
     # Run the test script
     if [ -f "run_tests.sh" ]; then
         if ! ./run_tests.sh; then
             echo -e "${RED}❌ $name tests failed${NC}"
+            cd ..
             exit 1
         fi
     else
         echo -e "${RED}❌ No test script found in $dir${NC}"
+        cd ..
         exit 1
     fi
     

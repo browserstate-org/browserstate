@@ -4,9 +4,14 @@
  */
 
 import path from 'path';
+import { fileURLToPath } from 'url';
 import fs from 'fs';
-import { BrowserState } from '../../../typescript/src/BrowserState';
+import { BrowserState } from '../../../typescript/src/BrowserState.js';
 import { chromium } from 'playwright';
+
+// Get current file directory with ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Redis configuration matching Python example
 const REDIS_CONFIG = {
@@ -65,12 +70,12 @@ async function verifyPythonState() {
             if (notesData) {
                 const notes = JSON.parse(notesData);
                 console.log(`\nFound ${notes.length} notes:`);
-                notes.forEach((note: { text: string; timestamp: string }) => {
+                notes.forEach((note) => {
                     console.log(`  - ${note.text} (${note.timestamp})`);
                 });
 
                 // Verify the notes were created by Python
-                const pythonNotes = notes.filter((note: { text: string }) => 
+                const pythonNotes = notes.filter((note) => 
                     note.text.startsWith('Python created note')
                 );
                 console.log(`\n✅ Found ${pythonNotes.length} Python-created notes`);

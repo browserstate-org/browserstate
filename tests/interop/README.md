@@ -29,9 +29,11 @@ Run the setup script to prepare the test environments:
 
 This will:
 1. Create virtual environments for the test directories
-2. Install the Python package in development mode
-3. Install the TypeScript package in development mode
-4. Set up all necessary dependencies
+2. Install all required dependencies:
+   - Python: boto3, google-cloud-storage, redis, playwright
+   - TypeScript: playwright, ts-node
+3. Install the Python and TypeScript packages in development mode
+4. Install and configure the Playwright browser automation tool
 
 ## Running Tests
 
@@ -43,8 +45,9 @@ To run all interop tests:
 
 This will:
 1. Check if Redis is running
-2. Run each test suite in sequence
-3. Report success or failure for each test
+2. Verify that all required dependencies are installed
+3. Run each test suite in sequence
+4. Report success or failure for each test
 
 ## Test Structure
 
@@ -67,11 +70,51 @@ The tests focus on localStorage data persistence through Redis storage.
 These tests are designed to be run in GitHub workflows. Example workflow step:
 
 ```yaml
-- name: Run Interop Tests
-  run: |
-    cd tests/interop
-    ./setup.sh
-    ./run_all.sh
+name: Interop Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  interop-tests:
+    runs-on: ubuntu-latest
+    
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Setup Interop Test Environment
+        run: |
+          cd tests/interop
+          ./setup.sh
+      
+      - name: Run Interop Tests
+        run: |
+          cd tests/interop
+          ./run_all.sh
 ```
 
 ## Troubleshooting
@@ -81,14 +124,15 @@ These tests are designed to be run in GitHub workflows. Example workflow step:
    redis-cli ping
    ```
 
-2. If Python package is not found:
+2. If dependencies are missing:
    ```bash
    cd tests/interop
    ./setup.sh
    ```
 
-3. If TypeScript package is not found:
+3. If Playwright browser installation fails:
    ```bash
-   cd tests/interop
-   ./setup.sh
+   cd tests/interop/python-redis-typescript
+   source venv/bin/activate
+   python -m playwright install --help
    ``` 

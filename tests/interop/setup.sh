@@ -28,6 +28,14 @@ setup_test_dir() {
     python3 -m venv venv
     source venv/bin/activate
     
+    # Upgrade pip
+    pip install --upgrade pip
+    
+    # Install Python dependencies
+    print_header "Installing Python dependencies"
+    pip install boto3 google-cloud-storage redis playwright
+    python -m playwright install chromium
+    
     # Install Python package
     pip install -e ../../../python
     
@@ -35,8 +43,8 @@ setup_test_dir() {
     npm init -y
     npm install -e ../../../typescript
     
-    # Install ts-node globally
-    npm install -g ts-node
+    # Install ts-node and other TypeScript dependencies
+    npm install --no-save playwright ts-node
     
     cd ..
 }

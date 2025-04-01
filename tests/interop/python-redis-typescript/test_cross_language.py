@@ -9,15 +9,19 @@ import json
 import asyncio
 from pathlib import Path
 from playwright.async_api import async_playwright
-from browserstate import BrowserState, RedisStorage
+from browserstate import BrowserState, BrowserStateOptions, RedisStorage
 
-# Redis configuration matching TypeScript example
-REDIS_CONFIG = {
+# Redis configuration for Python
+REDIS_URL = "redis://localhost:6379/0"
+REDIS_KEY_PREFIX = "browserstate:"
+
+# Redis configuration matching TypeScript format - for reference only
+REDIS_CONFIG_TS = {
     "host": "localhost",
     "port": 6379,
     "password": None,
     "db": 0,
-    "key_prefix": "browserstate:",
+    "keyPrefix": "browserstate:",
     "ttl": 604800  # 7 days
 }
 
@@ -125,12 +129,18 @@ async def main():
     """Main function to run the cross-language interop test."""
     print("🚀 Starting Python -> Redis -> TypeScript Interop Test\n")
     
+    # Create a Redis storage provider with the correct URL format
+    redis_options = {
+        "redis_url": REDIS_URL,
+        "key_prefix": REDIS_KEY_PREFIX
+    }
+    
     # Initialize browser state with Redis storage
-    browser_state = BrowserState(
+    options = BrowserStateOptions(
         user_id="interop_test_user",
-        storage_type="redis",
-        redis_options=REDIS_CONFIG
+        redis_options=redis_options
     )
+    browser_state = BrowserState(options)
     
     # Test session ID
     session_id = "cross_language_test"
