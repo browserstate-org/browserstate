@@ -1,6 +1,4 @@
 #!/bin/bash
-
-# Exit on error
 set -e
 
 # Colors for output
@@ -9,12 +7,12 @@ RED='\033[0;31m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Function to print section headers
+# Print header function
 print_header() {
     echo -e "\n${BLUE}=== $1 ===${NC}\n"
 }
 
-# Function to check if Redis is running
+# Check if Redis is running
 check_redis() {
     print_header "Checking Redis Connection"
     if ! redis-cli ping > /dev/null 2>&1; then
@@ -24,44 +22,60 @@ check_redis() {
     echo -e "${GREEN}✅ Redis is running${NC}"
 }
 
-# Function to run a test suite
-run_test_suite() {
-    local dir=$1
-    local name=$2
-    print_header "Running $name Tests"
-    
-    cd "$dir"
-    
-    # Run the test script
-    if [ -f "run_tests.sh" ]; then
-        if ! ./run_tests.sh; then
-            echo -e "${RED}❌ $name tests failed${NC}"
-            cd ..
-            exit 1
-        fi
-    else
-        echo -e "${RED}❌ No test script found in $dir${NC}"
-        cd ..
-        exit 1
-    fi
-    
-    cd ..
-    echo -e "${GREEN}✅ $name tests completed successfully${NC}"
+# Run a Python test for a given browser, mode, and session ID
+run_python_test() {
+    local browser=$1
+    local mode=$2
+    local session=$3
+    print_header "Running Python Test: Browser=${browser}, Mode=${mode}, Session=${session}"
+    python3 python_tests/run_python_tests.py --browser "$browser" --mode "$mode" --session "$session"
+}
+
+# Run a TypeScript test for a given browser, mode, and session ID
+run_ts_test() {
+    local browser=$1
+    local mode=$2
+    local session=$3
+    print_header "Running TypeScript Test: Browser=${browser}, Mode=${mode}, Session=${session}"
+    node typescript_tests/run_ts_tests.mjs --browser "$browser" --mode "$mode" --session "$session"
+}
+
+# Run cross‑language interop tests
+run_cross_language_tests() {
+    print_header "Cross‑Language Interop Test: Python creates state, TypeScript verifies state"
+    SESSION="py_create_ts_verify"
+    run_python_test "chromium" "create" "$SESSION"
+    run_ts_test "chromium" "verify" "$SESSION"
+
+    print_header "Cross‑Language Interop Test: TypeScript creates state, Python verifies state"
+    SESSION="ts_create_py_verify"
+    run_ts_test "chromium" "create" "$SESSION"
+    run_python_test "chromium" "verify" "$SESSION"
 }
 
 # Main execution
-echo -e "${BLUE}🚀 Starting BrowserState Interop Tests${NC}"
+echo -e "${BLUE}🚀 Starting Full BrowserState Interop Tests${NC}"
 
-# Check Redis
 check_redis
 
-# Run all test suites
-print_header "Cross-Language Interoperability Tests"
-run_test_suite "python-redis-typescript" "Python -> Redis -> TypeScript"
-run_test_suite "typescript-redis-python" "TypeScript -> Redis -> Python"
+# Define browsers to test
+BROWSERS=("chromium" "webkit" "firefox")
 
-print_header "Cross-Browser Interoperability Tests"
-run_test_suite "typescript-chrome-redis-safari" "Chrome -> Redis -> Safari"
-run_test_suite "python-chrome-redis-safari" "Python-Chrome -> Redis -> Safari"
+# Run Python cross‑browser tests (create and verify) for each browser
+for browser in "${BROWSERS[@]}"; do
+    SESSION="py_${browser}_test"
+    run_python_test "$browser" "create" "$SESSION"
+    run_python_test "$browser" "verify" "$SESSION"
+done
 
-echo -e "\n${GREEN}✨ All interop tests completed successfully!${NC}" 
+# Run TypeScript cross‑browser tests (create and verify) for each browser
+for browser in "${BROWSERS[@]}"; do
+    SESSION="ts_${browser}_test"
+    run_ts_test "$browser" "create" "$SESSION"
+    run_ts_test "$browser" "verify" "$SESSION"
+done
+
+# Run cross‑language tests
+run_cross_language_tests
+
+echo -e "\n${GREEN}✨ All interop tests completed successfully!${NC}"

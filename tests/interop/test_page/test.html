@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>BrowserState Test Page</title>
+</head>
+
+<body>
+    <h1>BrowserState Test Page</h1>
+    <input type="text" id="noteInput" placeholder="Enter note" />
+    <button id="addNoteButton">Add Note</button>
+    <script>
+        document.getElementById('addNoteButton').addEventListener('click', () => {
+            const noteInput = document.getElementById('noteInput');
+            const note = noteInput.value.trim();
+            if (note === "") return;
+            let notes = JSON.parse(localStorage.getItem('notes') || '[]');
+            const newNote = {
+                text: note,
+                timestamp: new Date().toISOString()
+            };
+            notes.push(newNote);
+            localStorage.setItem('notes', JSON.stringify(notes));
+            noteInput.value = "";
+            console.log('Note added:', newNote);
+        });
+    </script>
+</body>
+
+</html>
