@@ -33,7 +33,7 @@ if [ ! -f "package.json" ]; then
 fi
 npm install playwright ts-node ioredis --no-save
 # Install the local TypeScript browserstate package (assumes it’s in ../../typescript)
-npm install -e ../../../typescript
+npm install -e ../../typescript
 npm install minimist
 npm install playwright
 cd ..

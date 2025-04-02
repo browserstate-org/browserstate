@@ -42,7 +42,7 @@ run_ts_test() {
     node typescript_tests/run_ts_tests.mjs --browser "$browser" --mode "$mode" --session "$session"
 }
 
-# Run cross‑language interop tests
+# Run cross‑language interop tests (existing)
 run_cross_language_tests() {
     print_header "Cross‑Language Interop Test: Python creates state, TypeScript verifies state"
     SESSION="py_create_ts_verify"
@@ -63,21 +63,65 @@ check_redis
 # Define browsers to test
 BROWSERS=("chromium" "webkit" "firefox")
 
-# Run Python cross‑browser tests (create and verify) for each browser
+# Run Python cross‑browser tests (create and verify) for each browser (same browser tests)
 for browser in "${BROWSERS[@]}"; do
     SESSION="py_${browser}_test"
     run_python_test "$browser" "create" "$SESSION"
     run_python_test "$browser" "verify" "$SESSION"
 done
 
-# Run TypeScript cross‑browser tests (create and verify) for each browser
+# Run TypeScript cross‑browser tests (create and verify) for each browser (same browser tests)
 for browser in "${BROWSERS[@]}"; do
     SESSION="ts_${browser}_test"
     run_ts_test "$browser" "create" "$SESSION"
     run_ts_test "$browser" "verify" "$SESSION"
 done
 
-# Run cross‑language tests
+# Run Python cross‑browser tests: create with one browser, verify with a different browser
+for creator in "${BROWSERS[@]}"; do
+    for verifier in "${BROWSERS[@]}"; do
+        if [ "$creator" != "$verifier" ]; then
+            SESSION="py_${creator}_to_py_${verifier}"
+            run_python_test "$creator" "create" "$SESSION"
+            run_python_test "$verifier" "verify" "$SESSION"
+        fi
+    done
+done
+
+# Run TypeScript cross‑browser tests: create with one browser, verify with a different browser
+for creator in "${BROWSERS[@]}"; do
+    for verifier in "${BROWSERS[@]}"; do
+        if [ "$creator" != "$verifier" ]; then
+            SESSION="ts_${creator}_to_ts_${verifier}"
+            run_ts_test "$creator" "create" "$SESSION"
+            run_ts_test "$verifier" "verify" "$SESSION"
+        fi
+    done
+done
+
+# Run cross‑language tests: Python creates state with one browser, TypeScript verifies with a different browser
+for creator in "${BROWSERS[@]}"; do
+    for verifier in "${BROWSERS[@]}"; do
+        if [ "$creator" != "$verifier" ]; then
+            SESSION="py_${creator}_to_ts_${verifier}"
+            run_python_test "$creator" "create" "$SESSION"
+            run_ts_test "$verifier" "verify" "$SESSION"
+        fi
+    done
+done
+
+# Run cross‑language tests: TypeScript creates state with one browser, Python verifies with a different browser
+for creator in "${BROWSERS[@]}"; do
+    for verifier in "${BROWSERS[@]}"; do
+        if [ "$creator" != "$verifier" ]; then
+            SESSION="ts_${creator}_to_py_${verifier}"
+            run_ts_test "$creator" "create" "$SESSION"
+            run_python_test "$verifier" "verify" "$SESSION"
+        fi
+    done
+done
+
+# Run cross‑language tests (existing)
 run_cross_language_tests
 
 echo -e "\n${GREEN}✨ All interop tests completed successfully!${NC}"
