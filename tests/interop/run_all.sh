@@ -1,4 +1,6 @@
 #!/bin/bash
+source ./python_tests/venv/bin/activate
+
 set -e
 
 # Colors for output

@@ -20,8 +20,8 @@ fi
 source python_tests/venv/bin/activate
 pip install --upgrade pip
 pip install playwright redis boto3 google-cloud-storage
-# Install the local Python browserstate package (assumes it’s in ../../../../python)
-pip install -e ../../../python
+# Install the local Python browserstate package (assumes it’s in ../../python)
+pip install -e ../../python
 python -m playwright install chromium firefox webkit
 deactivate
 
@@ -32,8 +32,10 @@ if [ ! -f "package.json" ]; then
     npm init -y
 fi
 npm install playwright ts-node ioredis --no-save
-# Install the local TypeScript browserstate package (assumes it’s in ../../../../typescript)
+# Install the local TypeScript browserstate package (assumes it’s in ../../typescript)
 npm install -e ../../../typescript
+npm install minimist
+npm install playwright
 cd ..
 
 print_header "Setup Complete"
