@@ -20,8 +20,8 @@ REDIS_KEY_PREFIX = "browserstate"
 SESSION_ID = "typescript_to_python_test"
 USER_ID = "interop_test_user"
 
-# Debug mode - set to True to see browser UI
-DEBUG = False
+# Debug mode - set to True to see browser UI during tests
+DEBUG = os.environ.get('HEADLESS', 'false').lower() != 'true'
 
 # Path to the test HTML file - using absolute path to ensure same origin
 TEST_HTML_PATH = Path(__file__).parent.parent.parent.parent / "typescript" / "examples" / "shared" / "test.html"

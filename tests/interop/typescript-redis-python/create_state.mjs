@@ -17,7 +17,7 @@ const SESSION_ID = 'typescript_to_python_test';
 const USER_ID = 'interop_test_user';
 
 // Debug mode - set to true to see browser UI
-const DEBUG = false;
+const DEBUG = process.env.HEADLESS?.toLowerCase() !== 'true';
 
 // Redis configuration 
 const REDIS_CONFIG = {

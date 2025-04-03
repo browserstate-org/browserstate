@@ -25,7 +25,7 @@ TEST_HTML_PATH = Path(__file__).parent.parent.parent.parent / "typescript" / "ex
 TEST_URL = f"file://{TEST_HTML_PATH.absolute()}"
 
 # Debug mode - set to True to see browser UI during tests
-DEBUG = False
+DEBUG = os.environ.get('HEADLESS', 'false').lower() != 'true'
 
 def fail_test(message):
     """Fail the test with a clear error message."""
