@@ -160,8 +160,9 @@ function isZipEntrySafe(entryPath: string, targetDir: string): boolean {
   const normalizedTarget = path.normalize(targetDir);
   const resolvedPath = path.resolve(normalizedTarget, entryPath);
   
-  // Check if the resolved path starts with the target directory
-  return resolvedPath.startsWith(normalizedTarget);
+  // Check if the resolved path is within the target directory
+  // Use relative path to check if it goes outside the target
+  return !path.relative(normalizedTarget, resolvedPath).startsWith('..');
 }
 
 /**

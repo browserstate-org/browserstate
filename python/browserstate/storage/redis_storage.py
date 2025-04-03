@@ -36,8 +36,12 @@ def is_zipfile_safe(zip_file_path: str, target_path: str) -> bool:
             # Resolve the complete path
             extracted_path = os.path.normpath(os.path.join(target_path, zip_info.filename))
             
-            # Check if path would escape the target directory
-            if not extracted_path.startswith(target_path):
+            # Check if path would escape the target directory using commonpath
+            if os.path.commonpath([extracted_path, target_path]) != target_path:
+                return False
+                
+            # Additional check using relative path
+            if os.path.relpath(extracted_path, target_path).startswith('..'):
                 return False
     
     return True
