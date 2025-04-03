@@ -46,6 +46,14 @@ interface SessionUploadMetadata {
 }
 
 /**
+ * Extract-zip options interface
+ */
+interface ExtractOptions {
+  dir: string;
+  onEntry?: (entry: { fileName: string }, zipfile: unknown) => void;
+}
+
+/**
  * Redis Storage Architecture
  * =========================
  *
@@ -138,6 +146,22 @@ export interface RedisStorageOptions {
    * @example 604800 // 7 days
    */
   ttl?: number;
+}
+
+/**
+ * Validates that a ZIP entry path doesn't contain directory traversal attempts
+ * to prevent ZIP slip vulnerability
+ * @param entryPath - The path from the ZIP entry
+ * @param targetDir - The directory where files will be extracted
+ * @returns Whether the path is safe
+ */
+function isZipEntrySafe(entryPath: string, targetDir: string): boolean {
+  // Normalize paths to handle different path formats
+  const normalizedTarget = path.normalize(targetDir);
+  const resolvedPath = path.resolve(normalizedTarget, entryPath);
+  
+  // Check if the resolved path starts with the target directory
+  return resolvedPath.startsWith(normalizedTarget);
 }
 
 /**
@@ -340,7 +364,19 @@ export class RedisStorageProvider implements StorageProvider {
 
       // Extract the zip file to the user data directory
       console.log(`[Redis] Extracting zip to ${userDataDir}`);
-      await extractZip(zipFilePath, { dir: userDataDir });
+      const options: ExtractOptions = { 
+        dir: userDataDir,
+        // Add onEntry callback to prevent ZIP slip vulnerability
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        onEntry: (entry, _) => {
+          // Ensure the entry's path doesn't escape the target directory (ZIP slip protection)
+          const fileName = entry.fileName;
+          if (!isZipEntrySafe(fileName, userDataDir)) {
+            throw new Error(`Security risk: ZIP entry "${fileName}" is outside extraction directory`);
+          }
+        }
+      };
+      await extractZip(zipFilePath, options);
 
       // Clean up the temporary zip file
       await fs.remove(zipFilePath);

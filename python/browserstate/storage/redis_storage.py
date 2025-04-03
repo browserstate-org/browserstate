@@ -7,11 +7,59 @@ import logging
 import base64
 import json
 import time
+import pathlib
 from typing import List
 
 import redis  # Requires: pip install redis
 
 from .storage_provider import StorageProvider
+
+def is_zipfile_safe(zip_file_path: str, target_path: str) -> bool:
+    """
+    Check if a ZIP file is safe to extract (no directory traversal attacks).
+    
+    Args:
+        zip_file_path: Path to the ZIP file
+        target_path: Target extraction directory
+        
+    Returns:
+        True if the ZIP file is safe, False otherwise
+    """
+    target_path = os.path.normpath(os.path.abspath(target_path))
+    
+    with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+        for zip_info in zip_ref.infolist():
+            # Skip directories
+            if zip_info.filename.endswith('/'):
+                continue
+                
+            # Resolve the complete path
+            extracted_path = os.path.normpath(os.path.join(target_path, zip_info.filename))
+            
+            # Check if path would escape the target directory
+            if not extracted_path.startswith(target_path):
+                return False
+    
+    return True
+
+def safe_extract_zip(zip_file_path: str, target_path: str) -> None:
+    """
+    Safely extract a ZIP file, preventing directory traversal attacks.
+    
+    Args:
+        zip_file_path: Path to the ZIP file
+        target_path: Target extraction directory
+        
+    Raises:
+        ValueError: If the ZIP file contains unsafe entries
+    """
+    # Check if ZIP is safe
+    if not is_zipfile_safe(zip_file_path, target_path):
+        raise ValueError("Security risk: ZIP file contains entries that would extract outside target directory")
+    
+    # Extract the ZIP file
+    with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+        zip_ref.extractall(target_path)
 
 class RedisStorage(StorageProvider):
     """
@@ -107,9 +155,8 @@ class RedisStorage(StorageProvider):
             
             logging.info(f"Extracting ZIP file to: {target_path}")
             
-            # Extract zip file to target directory
-            with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-                zip_ref.extractall(target_path)
+            # Safely extract zip file to target directory
+            safe_extract_zip(zip_file_path, target_path)
                 
             # Clean up temporary zip file
             os.remove(zip_file_path)
