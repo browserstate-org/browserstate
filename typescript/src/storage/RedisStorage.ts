@@ -120,7 +120,7 @@ export interface RedisStorageOptions {
 
   /**
    * Prefix for Redis keys to avoid collisions with other applications
-   * @default "browserstate:"
+   * @default "browserstate"
    */
   keyPrefix?: string;
 
@@ -173,7 +173,13 @@ export class RedisStorageProvider implements StorageProvider {
    * @param options - Redis connection and storage configuration
    */
   constructor(options: RedisStorageOptions) {
-    this.keyPrefix = options.keyPrefix || "browserstate:";
+    this.keyPrefix = options.keyPrefix || "browserstate";
+    
+    // Validate keyPrefix format
+    if (this.keyPrefix.includes(':')) {
+      throw new Error("keyPrefix must not contain colons (:). The implementation automatically builds Redis keys in the format: {prefix}{userId}:{sessionId}");
+    }
+    
     this.tempDir = options.tempDir || os.tmpdir();
     this.ttl = options.ttl;
     this.options = options;
