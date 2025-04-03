@@ -1,6 +1,6 @@
 {
   "name": "browserstate",
-  "version": "0.3.0-canary.20250329022411-canary.20250329155936-canary.20250329174942-canary.20250329182118-canary.20250329185246-canary.20250329220413-canary.20250330160314-canary.20250330203600-canary.20250330214647",
+  "version": "0.3.0-canary.20250329022411-canary.20250329155936-canary.20250329174942-canary.20250329182118-canary.20250329185246-canary.20250329220413-canary.20250330160314-canary.20250330203600-canary.20250330214647-canary.20250403070527",
   "description": "Manage browser profiles across cloud storage providers",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
