@@ -39,7 +39,7 @@ const REDIS_CONFIG = {
   db: 0,
   
   // Storage configuration
-  keyPrefix: 'browserstate:',
+  keyPrefix: 'browserstate',
   
   // Advanced options
   ttl: 604800, // 7 days TTL

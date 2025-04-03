@@ -31,7 +31,7 @@ class RedisStorage(StorageProvider):
         """
         # Validate key_prefix format
         if ":" in key_prefix:
-            raise ValueError("key_prefix must not contain colons (:). The implementation automatically builds Redis keys in the format: {prefix}{userId}:{sessionId}")
+            raise ValueError("key_prefix must not contain colons (:). The implementation automatically builds Redis keys in the format: {prefix}:{userId}:{sessionId}")
             
         self.redis_client = redis.Redis.from_url(redis_url)
         self.key_prefix = key_prefix
@@ -39,11 +39,18 @@ class RedisStorage(StorageProvider):
     
     def _get_key(self, user_id: str, session_id: str) -> str:
         """Generate a Redis key for a given user and session."""
-        return f"{self.key_prefix}{user_id}:{session_id}"
+        # Validate that user_id and session_id don't contain colons
+        if ":" in user_id:
+            raise ValueError("user_id must not contain colons (:)")
+        if ":" in session_id:
+            raise ValueError("session_id must not contain colons (:)")
+        return f"{self.key_prefix}:{user_id}:{session_id}"
     
     def _get_metadata_key(self, user_id: str, session_id: str) -> str:
         """Generate a Redis key for session metadata."""
-        return f"{self.key_prefix}{user_id}:{session_id}:metadata"
+        # Reuse validation from _get_key
+        self._get_key(user_id, session_id)
+        return f"{self.key_prefix}:{user_id}:{session_id}:metadata"
     
     def _get_temp_path(self, user_id: str, session_id: str) -> str:
         """Get a temporary path for a session."""
@@ -167,6 +174,7 @@ class RedisStorage(StorageProvider):
             metadata = {
                 "timestamp": time.time() * 1000,  # Current time in milliseconds
                 "version": "2.0",
+                "encrypted": False,  # Prepare for future encryption support
             }
             
             # Store metadata in Redis
@@ -196,21 +204,26 @@ class RedisStorage(StorageProvider):
         Returns:
             List of session identifiers.
         """
-        pattern = f"{self.key_prefix}{user_id}:*"
+        # Validate user_id
+        if ":" in user_id:
+            raise ValueError("user_id must not contain colons (:)")
+            
+        pattern = f"{self.key_prefix}:{user_id}:*"
         logging.info(f"Listing sessions with pattern: {pattern}")
         
         try:
             keys = self.redis_client.keys(pattern)
             session_ids = []
+            prefix_len = len(f"{self.key_prefix}:{user_id}:")
+            
             for key in keys:
                 key_str = key.decode('utf-8') if isinstance(key, bytes) else key
                 # Extract sessionId from key
-                parts = key_str[len(self.key_prefix) + len(user_id) + 1:].split(':')
-                session_id = parts[0]
+                remaining = key_str[prefix_len:]
                 
-                # Exclude metadata keys and deduplicate
-                if len(parts) == 1 and session_id not in session_ids:
-                    session_ids.append(session_id)
+                # Only process keys without additional colons (to exclude metadata)
+                if ":" not in remaining and remaining not in session_ids:
+                    session_ids.append(remaining)
             
             logging.info(f"Found {len(session_ids)} sessions for user {user_id}")
             return session_ids

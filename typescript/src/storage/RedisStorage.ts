@@ -34,6 +34,7 @@ interface SessionMetadata {
   timestamp?: number;
   fileCount?: number;
   version?: string;
+  encrypted?: boolean;
 }
 
 // Type for metadata created during upload
@@ -41,6 +42,7 @@ interface SessionUploadMetadata {
   timestamp: number;
   fileCount: number;
   version: string;
+  encrypted: boolean;
 }
 
 /**
@@ -69,8 +71,8 @@ interface SessionUploadMetadata {
  * Upload:
  * 1. Browser state calls upload() with a directory path containing profile files
  * 2. Directory is packaged into a single ZIP archive in a temporary location
- * 3. ZIP is encoded as base64 and stored in Redis at key: {prefix}{userId}:{sessionId}
- * 4. Metadata is stored separately at key: {prefix}{userId}:{sessionId}:metadata
+ * 3. ZIP is encoded as base64 and stored in Redis at key: {prefix}:{userId}:{sessionId}
+ * 4. Metadata is stored separately at key: {prefix}:{userId}:{sessionId}:metadata
  *
  * Download:
  * 1. Browser state calls download() with userId and sessionId
@@ -177,7 +179,7 @@ export class RedisStorageProvider implements StorageProvider {
     
     // Validate keyPrefix format
     if (this.keyPrefix.includes(':')) {
-      throw new Error("keyPrefix must not contain colons (:). The implementation automatically builds Redis keys in the format: {prefix}{userId}:{sessionId}");
+      throw new Error("keyPrefix must not contain colons (:). The implementation automatically builds Redis keys in the format: {prefix}:{userId}:{sessionId}");
     }
     
     this.tempDir = options.tempDir || os.tmpdir();
@@ -248,11 +250,20 @@ export class RedisStorageProvider implements StorageProvider {
   }
 
   private getSessionKey(userId: string, sessionId: string): string {
-    return `${this.keyPrefix}${userId}:${sessionId}`;
+    // Validate that userId and sessionId don't contain colons
+    if (userId.includes(':')) {
+      throw new Error("userId must not contain colons (:)");
+    }
+    if (sessionId.includes(':')) {
+      throw new Error("sessionId must not contain colons (:)");
+    }
+    return `${this.keyPrefix}:${userId}:${sessionId}`;
   }
 
   private getMetadataKey(userId: string, sessionId: string): string {
-    return `${this.keyPrefix}${userId}:${sessionId}:metadata`;
+    // Reuse validation from getSessionKey
+    this.getSessionKey(userId, sessionId);
+    return `${this.keyPrefix}:${userId}:${sessionId}:metadata`;
   }
 
   /**
@@ -425,6 +436,7 @@ export class RedisStorageProvider implements StorageProvider {
         timestamp: Date.now(),
         fileCount: 0, // We don't count individual files anymore
         version: "2.0", // Update version to indicate zip format
+        encrypted: false, // Default to not encrypted
       };
 
       console.log(
@@ -516,16 +528,21 @@ export class RedisStorageProvider implements StorageProvider {
       throw new Error("Redis client not initialized");
     }
 
-    const pattern = `${this.keyPrefix}${userId}:*`;
+    // Validate userId
+    if (userId.includes(':')) {
+      throw new Error("userId must not contain colons (:)");
+    }
+
+    const pattern = `${this.keyPrefix}:${userId}:*`;
     const keys = await this.redis.keys(pattern);
 
     return keys
       .map((key: string) => {
-        const match = key.match(new RegExp(`${this.keyPrefix}${userId}:(.+)$`));
+        const match = key.match(new RegExp(`${this.keyPrefix}:${userId}:(.+?)(?::metadata)?$`));
         return match ? match[1] : "";
       })
       .filter(Boolean)
-      .filter((key: string) => !key.includes(":metadata"))
+      .filter((key: string) => !key.includes(":"))
       .filter(
         (key: string, index: number, self: string[]) =>
           self.indexOf(key) === index,
