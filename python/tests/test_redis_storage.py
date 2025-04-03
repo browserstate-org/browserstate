@@ -32,3 +32,27 @@ def test_redis_storage_empty_session(fake_redis):
     assert os.path.exists(downloaded_path)
     assert not os.listdir(downloaded_path)
     shutil.rmtree(downloaded_path, ignore_errors=True)
+
+def test_redis_storage_validation(fake_redis):
+    # Test that colons are not allowed in user_id
+    try:
+        storage = RedisStorage(redis_url="redis://localhost:6379/0", key_prefix="browserstate")
+        storage.upload("test:user", "session1", "/tmp")
+        assert False, "Should have raised ValueError for colon in user_id"
+    except ValueError:
+        pass
+    
+    # Test that colons are not allowed in session_id
+    try:
+        storage = RedisStorage(redis_url="redis://localhost:6379/0", key_prefix="browserstate")
+        storage.upload("testuser", "session:1", "/tmp")
+        assert False, "Should have raised ValueError for colon in session_id"
+    except ValueError:
+        pass
+    
+    # Test that colons are not allowed in key_prefix
+    try:
+        RedisStorage(redis_url="redis://localhost:6379/0", key_prefix="browser:state")
+        assert False, "Should have raised ValueError for colon in key_prefix"
+    except ValueError:
+        pass

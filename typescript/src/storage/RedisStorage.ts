@@ -34,6 +34,7 @@ interface SessionMetadata {
   timestamp?: number;
   fileCount?: number;
   version?: string;
+  encrypted?: boolean;
 }
 
 // Type for metadata created during upload
@@ -41,6 +42,15 @@ interface SessionUploadMetadata {
   timestamp: number;
   fileCount: number;
   version: string;
+  encrypted: boolean;
+}
+
+/**
+ * Extract-zip options interface
+ */
+interface ExtractOptions {
+  dir: string;
+  onEntry?: (entry: { fileName: string }, zipfile: unknown) => void;
 }
 
 /**
@@ -69,8 +79,8 @@ interface SessionUploadMetadata {
  * Upload:
  * 1. Browser state calls upload() with a directory path containing profile files
  * 2. Directory is packaged into a single ZIP archive in a temporary location
- * 3. ZIP is encoded as base64 and stored in Redis at key: {prefix}{userId}:{sessionId}
- * 4. Metadata is stored separately at key: {prefix}{userId}:{sessionId}:metadata
+ * 3. ZIP is encoded as base64 and stored in Redis at key: {prefix}:{userId}:{sessionId}
+ * 4. Metadata is stored separately at key: {prefix}:{userId}:{sessionId}:metadata
  *
  * Download:
  * 1. Browser state calls download() with userId and sessionId
@@ -120,7 +130,7 @@ export interface RedisStorageOptions {
 
   /**
    * Prefix for Redis keys to avoid collisions with other applications
-   * @default "browserstate:"
+   * @default "browserstate"
    */
   keyPrefix?: string;
 
@@ -136,6 +146,23 @@ export interface RedisStorageOptions {
    * @example 604800 // 7 days
    */
   ttl?: number;
+}
+
+/**
+ * Validates that a ZIP entry path doesn't contain directory traversal attempts
+ * to prevent ZIP slip vulnerability
+ * @param entryPath - The path from the ZIP entry
+ * @param targetDir - The directory where files will be extracted
+ * @returns Whether the path is safe
+ */
+function isZipEntrySafe(entryPath: string, targetDir: string): boolean {
+  // Normalize paths to handle different path formats
+  const normalizedTarget = path.normalize(targetDir);
+  const resolvedPath = path.resolve(normalizedTarget, entryPath);
+  
+  // Check if the resolved path is within the target directory
+  // Use relative path to check if it goes outside the target
+  return !path.relative(normalizedTarget, resolvedPath).startsWith('..');
 }
 
 /**
@@ -173,7 +200,13 @@ export class RedisStorageProvider implements StorageProvider {
    * @param options - Redis connection and storage configuration
    */
   constructor(options: RedisStorageOptions) {
-    this.keyPrefix = options.keyPrefix || "browserstate:";
+    this.keyPrefix = options.keyPrefix || "browserstate";
+    
+    // Validate keyPrefix format
+    if (this.keyPrefix.includes(':')) {
+      throw new Error("keyPrefix must not contain colons (:). The implementation automatically builds Redis keys in the format: {prefix}:{userId}:{sessionId}");
+    }
+    
     this.tempDir = options.tempDir || os.tmpdir();
     this.ttl = options.ttl;
     this.options = options;
@@ -242,11 +275,20 @@ export class RedisStorageProvider implements StorageProvider {
   }
 
   private getSessionKey(userId: string, sessionId: string): string {
-    return `${this.keyPrefix}${userId}:${sessionId}`;
+    // Validate that userId and sessionId don't contain colons
+    if (userId.includes(':')) {
+      throw new Error("userId must not contain colons (:)");
+    }
+    if (sessionId.includes(':')) {
+      throw new Error("sessionId must not contain colons (:)");
+    }
+    return `${this.keyPrefix}:${userId}:${sessionId}`;
   }
 
   private getMetadataKey(userId: string, sessionId: string): string {
-    return `${this.keyPrefix}${userId}:${sessionId}:metadata`;
+    // Reuse validation from getSessionKey
+    this.getSessionKey(userId, sessionId);
+    return `${this.keyPrefix}:${userId}:${sessionId}:metadata`;
   }
 
   /**
@@ -323,7 +365,19 @@ export class RedisStorageProvider implements StorageProvider {
 
       // Extract the zip file to the user data directory
       console.log(`[Redis] Extracting zip to ${userDataDir}`);
-      await extractZip(zipFilePath, { dir: userDataDir });
+      const options: ExtractOptions = { 
+        dir: userDataDir,
+        // Add onEntry callback to prevent ZIP slip vulnerability
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        onEntry: (entry, _) => {
+          // Ensure the entry's path doesn't escape the target directory (ZIP slip protection)
+          const fileName = entry.fileName;
+          if (!isZipEntrySafe(fileName, userDataDir)) {
+            throw new Error(`Security risk: ZIP entry "${fileName}" is outside extraction directory`);
+          }
+        }
+      };
+      await extractZip(zipFilePath, options);
 
       // Clean up the temporary zip file
       await fs.remove(zipFilePath);
@@ -419,6 +473,7 @@ export class RedisStorageProvider implements StorageProvider {
         timestamp: Date.now(),
         fileCount: 0, // We don't count individual files anymore
         version: "2.0", // Update version to indicate zip format
+        encrypted: false, // Default to not encrypted
       };
 
       console.log(
@@ -510,16 +565,21 @@ export class RedisStorageProvider implements StorageProvider {
       throw new Error("Redis client not initialized");
     }
 
-    const pattern = `${this.keyPrefix}${userId}:*`;
+    // Validate userId
+    if (userId.includes(':')) {
+      throw new Error("userId must not contain colons (:)");
+    }
+
+    const pattern = `${this.keyPrefix}:${userId}:*`;
     const keys = await this.redis.keys(pattern);
 
     return keys
       .map((key: string) => {
-        const match = key.match(new RegExp(`${this.keyPrefix}${userId}:(.+)$`));
+        const match = key.match(new RegExp(`${this.keyPrefix}:${userId}:(.+?)(?::metadata)?$`));
         return match ? match[1] : "";
       })
       .filter(Boolean)
-      .filter((key: string) => !key.includes(":metadata"))
+      .filter((key: string) => !key.includes(":"))
       .filter(
         (key: string, index: number, self: string[]) =>
           self.indexOf(key) === index,
