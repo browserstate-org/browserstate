@@ -142,4 +142,12 @@ async function createTestData() {
 }
 
 // Run the state creation
-createTestData(); 
+createTestData()
+  .then(() => {
+    console.log('\n✨ Script completed, exiting process');
+    process.exit(0);
+  })
+  .catch(error => {
+    console.error(`Error in test: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }); 
