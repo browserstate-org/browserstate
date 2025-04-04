@@ -2,7 +2,7 @@
 
 BrowserState is a TypeScript/JavaScript library for managing browser profiles across different storage providers, including local storage, Redis, AWS S3, and Google Cloud Storage.
 
-> Perfect for Playwright, Puppeteer, and other browser automation frameworks. Eliminate login/auth problems and reduce bot detection risks.
+> Perfect for Playwright, Puppeteer, AI browser agents, and other browser automation frameworks. Eliminate login/auth problems and reduce bot detection risks.
 
 ---
 

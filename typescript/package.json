@@ -1,6 +1,6 @@
 {
   "name": "browserstate",
-  "version": "0.3.0-canary.20250404021914",
+  "version": "0.4.4",
   "description": "Manage browser profiles across cloud storage providers",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -27,7 +27,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/bigboateng/browserstate.git"
+    "url": "https://github.com/browserstate-org/browserstate"
+  },
+  "homepage": "https://browserstate.io",
+  "bugs": {
+    "url": "https://github.com/browserstate-org/browserstate/issues"
   },
   "keywords": [
     "browser",

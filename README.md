@@ -1,69 +1,159 @@
-# BrowserState
+# 🌐 BrowserState
 
-BrowserState is a cross-language library for saving and restoring browser profiles across machines using various storage providers. It helps you maintain browser state (cookies, local storage, etc.) between automated browser sessions.
+**BrowserState** is a cross-language library for saving and restoring full browser profiles across machines and environments.  
+It lets your automation behave like a **real, returning user** by persisting cookies, local storage, IndexedDB, service worker caches, and more.
 
-# Why BrowserState?
+> Supports Local, Redis, S3, and GCS backends. Works with Playwright, Puppeteer, Browser Use, Nova Act, and more.
+
+---
+
+## ⚡ Why BrowserState?
+
 Most browser automation workflows fail because authentication and session data don't persist reliably across environments. Manually handling cookies or re-authenticating slows everything down. Worse, many automations fail due to inconsistent browser fingerprints, machine IDs, and storage states—leading to bot detection and bans.
 
-BrowserState ensures your automation behaves like a real, returning user by providing:
+**BrowserState solves this by preserving a stable, persistent browser identity across runs** instead of resetting key markers, drastically reducing detection risks while maintaining full automation control.
 
+---
 
-Full Browser Context Restoration – Save and restore cookies, local storage, IndexedDB, service worker caches, and extension data. Resume automation 
-from the exact previous state.
+## 🧠 What You Get
 
-Multi-Instance Synchronization – Share browser profiles across multiple servers or devices, making automation scalable and resilient.
+- 🔄 **Full Browser Context Restoration**  
+  Save and restore cookies, local storage, IndexedDB, service worker caches, and extension data. Resume automation from exactly where you left off.
 
-Zero-Setup Onboarding for Automation – Instantly deploy automation-ready browser profiles without manual setup.
+- 🔗 **Multi-Instance Synchronization**  
+  Share browser profiles across multiple servers or devices, making automation scalable and resilient.
 
-Efficient Resource Usage – Persistent browser usage without memory leaks, eliminating the need to launch new instances for every run.
+- 🚀 **Zero-Setup Onboarding**  
+  Instantly deploy automation-ready browser profiles without manual setup.
 
-Faster Debugging & Reproducibility – Store failing test cases exactly as they were, making it easy to diagnose automation failures.
+- ⚡️ **Efficient Resource Usage**  
+  Persistent browser usage without memory leaks, eliminating the need to launch new instances for every run.
 
-Offline Execution & Caching – Automate tasks that rely on cached assets, such as scraping content behind paywalls or working in low-connectivity environments.
+- 🔍 **Debugging Snapshots**  
+  Store failing test cases exactly as they were, making it easy to diagnose automation failures.
 
-Cross-Device Synchronization – Seamlessly move between local development, cloud servers, and headless automation.
+- 💾 **Offline Execution & Caching**  
+  Automate tasks that rely on cached assets, such as scraping content behind paywalls or in low-connectivity environments.
 
-✅ Bot Detection Bypass
-Many bot detection systems track inconsistencies in browser states—frequent changes to fingerprints, device identifiers, and storage behavior trigger red flags. Most people get detected because they unknowingly create a "new machine" every time.
+- 🌍 **Cross-Device Synchronization**  
+  Seamlessly move between local development, cloud servers, and headless automation.
 
-BrowserState solves this by preserving a stable, persistent browser identity across runs instead of resetting key markers. This drastically reduces detection risks while maintaining full automation control.
+- 🛡️ **Bot Detection Bypass**  
+  Many detection systems flag users based on inconsistent browser fingerprints. BrowserState maintains stable machine identifiers and storage footprints across sessions.
 
-Now you can move fast without breaking sessions—or getting flagged as a bot.
+---
 
-## Features
-
-- Save browser profiles to multiple storage backends
-- Restore browser profiles on different machines
-- Support for multiple storage providers:
-  - ✅ Local storage (extensively tested)
-  - ⚠️ AWS S3 (needs additional testing)
-  - ✅ Google Cloud Storage (tested and works, but requires more extensive testing)
-- Language support:
-  - TypeScript/JavaScript
-  - Python
-- Automatic cleanup of temporary files with configurable behavior
-
-## Implementation Status
+## ✅ Features & Support Matrix
 
 | Feature | TypeScript | Python |
 |---------|------------|--------|
-| Local Storage | ✅ Tested | ✅ Implemented |
-| S3 Storage | ⚠️ Implemented | ⚠️ Implemented |
-| GCS Storage | ✅ Tested and works, but requires more extensive testing | ⚠️ Implemented |
+| Local Storage | ✅ Stable | ✅ Stable |
+| Redis Storage | ✅ Stable | ✅ Stable |
+| AWS S3 | ✅ Stable (needs more testing) | ✅ Stable (needs more testing) |
+| Google Cloud Storage | ✅ Stable | ✅ Stable (needs more testing) |
 | Browser Compatibility | Chrome, Firefox, Edge | Chrome, Firefox, Edge |
 
-## Usage
+---
 
-See language-specific documentation:
+## 📦 Installation
+
+### TypeScript/JavaScript
+```bash
+npm install browserstate
+
+# Optional dependencies based on storage provider
+npm install @aws-sdk/client-s3 @aws-sdk/lib-storage  # For S3
+npm install @google-cloud/storage                     # For GCS
+npm install ioredis                                   # For Redis
+```
+
+### Python
+```bash
+pip install browserstate
+
+# Optional dependencies based on storage provider
+pip install boto3                    # For S3
+pip install google-cloud-storage     # For GCS
+pip install redis                    # For Redis
+```
+
+---
+
+## 🔌 Quick Examples
+
+### TypeScript with Redis
+```typescript
+import { BrowserState } from 'browserstate';
+
+const browserState = new BrowserState({
+  userId: 'user123',
+  storageType: 'redis',
+  redisOptions: {
+    host: 'localhost',
+    port: 6379,
+    db: 0,
+    keyPrefix: 'browserstate:',
+    ttl: 7 * 24 * 60 * 60, // 7 days
+  }
+});
+
+// Mount a session - returns the path to use with your browser automation
+const userDataDir = await browserState.mount('session123');
+
+// Use with Playwright
+const browser = await chromium.launchPersistentContext(userDataDir, {
+  // your options here
+});
+
+// After your automation finishes
+await browser.close();
+
+// Save changes back to Redis
+await browserState.unmount();
+```
+
+### Python with Local Storage
+```python
+from browserstate import BrowserState
+
+browser_state = BrowserState(
+    user_id="user123",
+    storage_type="local",
+    local_options={
+        "storage_path": "/path/to/storage"
+    }
+)
+
+# Mount a session
+user_data_dir = browser_state.mount("session123")
+
+# Use with Playwright
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as p:
+    browser = p.chromium.launch_persistent_context(
+        user_data_dir=user_data_dir,
+        headless=False
+    )
+    # Your automation code here
+    browser.close()
+
+# Save changes
+browser_state.unmount()
+```
+
+---
+
+## 📚 Documentation
+
+For complete documentation, see the language-specific READMEs:
 
 - [TypeScript Documentation](typescript/README.md)
 - [Python Documentation](python/README.md)
 
-## Development
+---
 
-This repository contains implementations for multiple languages. The core functionality is mirrored across each language implementation while maintaining idiomatic code for each ecosystem.
-
-### Repository Structure
+## 🏗️ Project Structure
 
 ```
 browserstate/
@@ -72,26 +162,54 @@ browserstate/
 └── README.md           # This file
 ```
 
-## Contributing
+---
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+## 🧹 Automatic Cleanup
 
-## Issues and Support
+BrowserState creates temporary files on your local system when working with browser profiles. By default, these are automatically cleaned up when:
 
-If you encounter any problems or have questions about using BrowserState:
+1. You call `unmount()` to save the session
+2. The process exits normally
+3. The process is terminated with SIGINT (Ctrl+C)
+4. An uncaught exception occurs
 
-1. Check the documentation for your specific language implementation
-2. Search existing GitHub issues to see if your problem has been reported
+This behavior can be configured through the `autoCleanup` option.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Areas where we especially appreciate help:
+
+- Additional real-world testing of storage providers
+- Performance optimizations
+- New storage backend implementations
+- Browser compatibility testing
+- CLI wrappers for easier adoption
+
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
+
+## 🐛 Issues and Support
+
+If you encounter any problems:
+
+1. Check the documentation for your language implementation
+2. Search existing GitHub issues
 3. Create a new issue with:
-   - A clear, descriptive title
+   - Which language you're using (TypeScript/Python)
    - Which storage provider you're using
-   - Which language implementation (TypeScript/Python)
    - Steps to reproduce the issue
    - Expected vs. actual behavior
    - Environment details (browser, OS, etc.)
 
-We especially welcome feedback and testing reports for the S3 and GCS storage providers as they have been implemented but need additional real-world testing.
+---
 
-## License
+## ⚖️ License
 
-MIT 
+MIT
+
+---
+
+BrowserState is part of an effort to build the foundation of reliable, persistent browser automation. If you're building bots, agents, or workflows—you want your browser to remember things. Now it can. 
