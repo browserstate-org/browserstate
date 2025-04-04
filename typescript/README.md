@@ -1,29 +1,33 @@
 # 🌐 BrowserState
 
-BrowserState is a Node.js library for managing browser profiles across different storage providers, including local storage, AWS S3, and Google Cloud Storage.
+BrowserState is a TypeScript/JavaScript library for managing browser profiles across different storage providers, including local storage, Redis, AWS S3, and Google Cloud Storage.
 
+> Perfect for Playwright, Puppeteer, and other browser automation frameworks. Eliminate login/auth problems and reduce bot detection risks.
 
-# 🤔 Why BrowserState?
+---
+
+## 🤔 Why BrowserState?
+
 Most browser automation workflows fail because authentication and session data don't persist reliably across environments. Manually handling cookies or re-authenticating slows everything down. Worse, many automations fail due to inconsistent browser fingerprints, machine IDs, and storage states—leading to bot detection and bans.
 
 BrowserState ensures your automation behaves like a real, returning user by providing:
 
-🔄 Full Browser Context Restoration – Save and restore cookies, local storage, IndexedDB, service worker caches, and extension data. Resume automation 
-from the exact previous state.
+- 🔄 **Full Browser Context Restoration** – Save and restore cookies, local storage, IndexedDB, service worker caches, and extension data. Resume automation from exactly where you left off.
 
-🔗 Multi-Instance Synchronization – Share browser profiles across multiple servers or devices, making automation scalable and resilient.
+- 🔗 **Multi-Instance Synchronization** – Share browser profiles across multiple servers or devices, making automation scalable and resilient.
 
-🚀 Zero-Setup Onboarding for Automation – Instantly deploy automation-ready browser profiles without manual setup.
+- 🚀 **Zero-Setup Onboarding** – Instantly deploy automation-ready browser profiles without manual setup.
 
-⚡️ Efficient Resource Usage – Persistent browser usage without memory leaks, eliminating the need to launch new instances for every run.
+- ⚡️ **Efficient Resource Usage** – Persistent browser usage without memory leaks, eliminating the need to launch new instances for every run.
 
-🔍 Faster Debugging & Reproducibility – Store failing test cases exactly as they were, making it easy to diagnose automation failures.
+- 🔍 **Debugging Snapshots** – Store failing test cases exactly as they were, making it easy to diagnose automation failures.
 
-💾 Offline Execution & Caching – Automate tasks that rely on cached assets, such as scraping content behind paywalls or working in low-connectivity environments.
+- 💾 **Offline Execution & Caching** – Automate tasks that rely on cached assets, such as scraping content behind paywalls or in low-connectivity environments.
 
-🔄 Cross-Device Synchronization – Seamlessly move between local development, cloud servers, and headless automation.
+- 🌍 **Cross-Device Synchronization** – Seamlessly move between local development, cloud servers, and headless automation.
 
 ## 🛡️ Bot Detection Bypass
+
 Many bot detection systems track inconsistencies in browser states—frequent changes to fingerprints, device identifiers, and storage behavior trigger red flags. Most people get detected because they unknowingly create a "new machine" every time.
 
 BrowserState solves this by preserving a stable, persistent browser identity across runs instead of resetting key markers. This drastically reduces detection risks while maintaining full automation control.
@@ -34,9 +38,10 @@ Now you can move fast without breaking sessions—or getting flagged as a bot.
 
 | Storage Provider | Status |
 |------------------|--------|
-| Local Storage | ✅ Extensively tested |
-| S3 Storage | ✅ Tested and works, but requires more extensive testing in different environments |
-| GCS Storage | ✅ Tested and works, but requires more extensive testing in different environments |
+| Local Storage | ✅ Stable, extensively tested |
+| Redis Storage | ✅ Stable, production-ready |
+| S3 Storage | ✅ Stable (needs more real-world testing) |
+| GCS Storage | ✅ Stable (needs more real-world testing) |
 
 ## 📦 Installation
 
@@ -48,6 +53,11 @@ npm install browserstate
 
 BrowserState supports multiple storage backends. Depending on your needs, you may want to install additional dependencies:
 
+- For Redis storage:
+  ```bash
+  npm install ioredis
+  ```
+
 - For AWS S3 storage:
   ```bash
   npm install @aws-sdk/client-s3 @aws-sdk/lib-storage
@@ -58,13 +68,14 @@ BrowserState supports multiple storage backends. Depending on your needs, you ma
   npm install @google-cloud/storage
   ```
 
-## 💻 Usage
+## 💻 Usage Examples
+
+### Local Storage
 
 ```typescript
 import { BrowserState } from 'browserstate';
 
-// Local storage
-const localBrowserState = new BrowserState({
+const browserState = new BrowserState({
   userId: 'user123',
   storageType: 'local',
   localOptions: {
@@ -72,8 +83,53 @@ const localBrowserState = new BrowserState({
   }
 });
 
-// AWS S3 storage
-const s3BrowserState = new BrowserState({
+// Mount a session
+const userDataDir = await browserState.mount('session123');
+
+// Use with any browser automation framework
+// Example with Playwright:
+const browser = await chromium.launchPersistentContext(userDataDir, {
+  headless: false
+});
+
+// When you're done, save changes
+await browser.close();
+await browserState.unmount();
+```
+
+### Redis Storage
+
+```typescript
+import { BrowserState } from 'browserstate';
+
+const browserState = new BrowserState({
+  userId: 'user123',
+  storageType: 'redis',
+  redisOptions: {
+    host: 'localhost',
+    port: 6379,
+    keyPrefix: 'browserstate:',
+    ttl: 7 * 24 * 60 * 60, // 7 days
+    // All ioredis options are supported
+  }
+});
+
+// Mount a session
+const userDataDir = await browserState.mount('session123');
+
+// Use with your browser automation
+// ...
+
+// Save changes back to Redis
+await browserState.unmount();
+```
+
+### AWS S3 Storage
+
+```typescript
+import { BrowserState } from 'browserstate';
+
+const browserState = new BrowserState({
   userId: 'user123',
   storageType: 's3',
   s3Options: {
@@ -81,22 +137,52 @@ const s3BrowserState = new BrowserState({
     region: 'us-west-2',
     accessKeyID: 'YOUR_ACCESS_KEY_ID',
     secretAccessKey: 'YOUR_SECRET_ACCESS_KEY'
+    // Additional AWS S3 options can be specified
   }
 });
 
-// Google Cloud Storage
-const gcsBrowserState = new BrowserState({
+// Mount a session - downloads from S3 if it exists
+const userDataDir = await browserState.mount('session123');
+
+// Use with your browser automation
+// ...
+
+// Upload changes back to S3
+await browserState.unmount();
+```
+
+### Google Cloud Storage
+
+```typescript
+import { BrowserState } from 'browserstate';
+
+const browserState = new BrowserState({
   userId: 'user123',
   storageType: 'gcs',
   gcsOptions: {
     bucketName: 'my-browser-states',
     projectID: 'your-project-id',
     keyFilename: '/path/to/service-account-key.json'
+    // Additional GCS options can be specified
   }
 });
 
-// With autoCleanup disabled
-const longRunningBrowserState = new BrowserState({
+// Mount a session - downloads from GCS if it exists
+const userDataDir = await browserState.mount('session123');
+
+// Use with your browser automation
+// ...
+
+// Upload changes back to GCS
+await browserState.unmount();
+```
+
+### With Auto-Cleanup Disabled
+
+```typescript
+import { BrowserState } from 'browserstate';
+
+const browserState = new BrowserState({
   userId: 'user123',
   storageType: 'local',
   autoCleanup: false, // Disable automatic cleanup
@@ -105,47 +191,71 @@ const longRunningBrowserState = new BrowserState({
   }
 });
 
-// Use browser state
-async function example() {
-  // Mount a session
-  // For cloud storage (S3/GCS): Downloads the session from storage (if it exists) or creates a new one
-  // For local storage: Uses the existing session or creates a new one
-  // Returns the path to the local directory containing the browser profile
-  // This path must be used when launching the browser
-  const userDataDir = await browserState.mount('session123');
+// Use browser state...
 
-  // Your browser automation code here...
-
-  // Launch Chrome with the mounted profile and additional configurations
-  // userDataDir contains all the browser profile data (cookies, storage, etc.)
-  // This ensures the browser launches with the exact same state as last time
-  console.log("Launching Chrome browser with additional configurations...");
-  const chromeContext = await chromium.launchPersistentContext(userDataDir, {
-    headless: false, // Launch in non-headless mode for visibility
-    slowMo: 100, // Slow down operations for demo purposes
-    // Additional configurations can be added here as needed
-  });
-
-  // Perform browser automation tasks with the launched browser context
-  // Example: Navigate to a website and perform actions
-  const page = await chromeContext.newPage();
-  await page.goto('https://example.com');
-  await page.locator('text=Click me').click();
-
-  // Close the browser context to free up resources
-  console.log("Closing Chrome browser...");
-  await chromeContext.close();
-
-  // Unmount and save the session
-  // This is crucial - it ensures all browser state changes are saved back to storage
-  // Without this, any changes made during automation would be lost
-  // For cloud storage (S3/GCS): This uploads all changes back to the cloud
-  // For local storage: Since files are already in the correct location, this just cleans up temporary files
-  await browserState.unmount();
-}
+// Manually clean up when needed
+await browserState.cleanup();
 ```
 
-## 📚 API
+### Complete Example with Playwright
+
+```typescript
+import { BrowserState } from 'browserstate';
+import { chromium } from 'playwright';
+
+async function runAutomation() {
+  // Initialize BrowserState
+  const browserState = new BrowserState({
+    userId: 'user123',
+    storageType: 'redis',
+    redisOptions: {
+      host: 'localhost',
+      port: 6379,
+    }
+  });
+
+  // Mount a session
+  const userDataDir = await browserState.mount('my-session');
+
+  // Launch Playwright with the mounted profile
+  const browser = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    slowMo: 50,
+  });
+
+  try {
+    // Create a new page
+    const page = await browser.newPage();
+    
+    // Navigate to a website
+    await page.goto('https://example.com');
+    
+    // Perform actions (login, click, etc.)
+    await page.fill('#username', 'testuser');
+    await page.fill('#password', 'password123');
+    await page.click('#login-button');
+    
+    // Wait for navigation or specific element
+    await page.waitForSelector('.dashboard');
+    
+    // Take a screenshot
+    await page.screenshot({ path: 'dashboard.png' });
+    
+    // Close the browser
+    await browser.close();
+  } catch (error) {
+    console.error('Automation error:', error);
+    await browser.close();
+  } finally {
+    // Always unmount to save changes and clean up
+    await browserState.unmount();
+  }
+}
+
+runAutomation().catch(console.error);
+```
+
+## 📚 API Reference
 
 ### BrowserState
 
@@ -153,28 +263,54 @@ The main class for managing browser state.
 
 #### Constructor Options
 
-- `userId`: User identifier for organizing storage
-- `storageType`: Type of storage to use ('local', 's3', or 'gcs')
-- `autoCleanup`: Whether to automatically clean up temporary files on process exit (default: true)
-- `localOptions`: Options for local storage
-  - `storagePath`: Local storage directory path
-- `s3Options`: Options for AWS S3 storage
-  - `bucketName`: S3 bucket name
-  - `region`: AWS region
-  - `accessKeyID`: AWS access key ID
-  - `secretAccessKey`: AWS secret access key
-- `gcsOptions`: Options for Google Cloud Storage
-  - `bucketName`: GCS bucket name
-  - `projectID`: Google Cloud project ID
-  - `keyFilename`: Path to service account key file
+```typescript
+interface BrowserStateOptions {
+  userId: string;                  // User identifier for organizing storage
+  storageType: 'local' | 's3' | 'gcs' | 'redis';  // Storage provider type
+  autoCleanup?: boolean;           // Whether to automatically clean up temporary files (default: true)
+  localOptions?: {                 // Options for local storage
+    storagePath: string;           // Local storage directory path
+  };
+  s3Options?: {                    // Options for AWS S3 storage
+    bucketName: string;            // S3 bucket name
+    region: string;                // AWS region
+    accessKeyID: string;           // AWS access key ID
+    secretAccessKey: string;       // AWS secret access key
+    endpoint?: string;             // Optional endpoint for S3-compatible services
+  };
+  gcsOptions?: {                   // Options for Google Cloud Storage
+    bucketName: string;            // GCS bucket name
+    projectID: string;             // Google Cloud project ID
+    keyFilename?: string;          // Path to service account key file
+  };
+  redisOptions?: {                 // Options for Redis storage
+    host: string;                  // Redis host
+    port: number;                  // Redis port
+    password?: string;             // Redis password (if required)
+    db?: number;                   // Redis database number
+    keyPrefix?: string;            // Prefix for Redis keys
+    ttl?: number;                  // Time-to-live in seconds
+    // All ioredis options are supported
+  };
+}
+```
 
 #### Methods
 
-- `mount(sessionId: string)`: Downloads and prepares a session for use
-- `unmount()`: Uploads and cleans up the current session
-- `listSessions()`: Lists all available sessions for the user
-- `deleteSession(sessionId: string)`: Deletes a specific session
-- `cleanup()`: Manually clean up temporary files (useful when autoCleanup is disabled)
+- **mount(sessionId: string): Promise<string>**  
+  Downloads and prepares a session for use. Returns the path to use with your browser.
+
+- **unmount(): Promise<void>**  
+  Uploads and cleans up the current session.
+
+- **listSessions(): Promise<string[]>**  
+  Lists all available sessions for the user.
+
+- **deleteSession(sessionId: string): Promise<void>**  
+  Deletes a specific session.
+
+- **cleanup(): Promise<void>**  
+  Manually clean up temporary files (useful when autoCleanup is disabled).
 
 ## 🧹 Automatic Cleanup
 
@@ -217,7 +353,7 @@ If you encounter any issues or have feedback about specific storage providers:
    - Steps to reproduce the issue
    - Environment details (Node.js version, browser, etc.)
 
-We especially welcome feedback and testing reports for the S3 and GCS storage providers.
+We especially welcome feedback and testing reports for the Redis, S3, and GCS storage providers.
 
 ## 📄 License
 
@@ -233,20 +369,6 @@ npm install browserstate@canary
 To install a specific canary version:
 ```bash
 npm install browserstate@0.3.0-canary.TIMESTAMP
-```
-
-Canary releases are pre-release versions that may contain breaking changes or experimental features. Use with caution in production environments.
-
-## Canary Releases
-
-To install the latest canary version:
-```bash
-npm install browserstate@canary
-```
-
-To install a specific canary version:
-```bash
-npm install browserstate@
 ```
 
 Canary releases are pre-release versions that may contain breaking changes or experimental features. Use with caution in production environments.
