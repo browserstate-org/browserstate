@@ -8,6 +8,22 @@ BrowserState is a cross-language library for saving and restoring full browser p
 
 > Perfect for Playwright, Puppeteer, AI browser agents, and other browser automation frameworks. Eliminate login/auth problems and reduce bot detection risks.
 
+<p align="center">
+  <a href="https://playwright.dev" title="Playwright"><img src="https://playwright.dev/img/playwright-logo.svg" alt="Playwright" height="40"></a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="https://pptr.dev" title="Puppeteer"><img src="https://user-images.githubusercontent.com/10379601/29446482-04f7036a-841f-11e7-9872-91d1fc2ea683.png" alt="Puppeteer" height="40"></a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="https://www.selenium.dev" title="Selenium"><img src="https://cdn.jsdelivr.net/gh/SeleniumHQ/www.seleniumhq.org@master/src/main/webapp/images/selenium-logo.png" alt="Selenium" height="40"></a>
+</p>
+
+<p align="center">
+  <a href="#" title="Chrome"><img src="https://raw.githubusercontent.com/alrra/browser-logos/main/src/chrome/chrome.svg" alt="Chrome" height="40"></a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="#" title="Firefox"><img src="https://raw.githubusercontent.com/alrra/browser-logos/main/src/firefox/firefox.svg" alt="Firefox" height="40"></a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="#" title="Edge"><img src="https://raw.githubusercontent.com/alrra/browser-logos/main/src/edge/edge.svg" alt="Edge" height="40"></a>
+</p>
+
 ```bash
 # Install
 npm install browserstate
