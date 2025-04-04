@@ -27,7 +27,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/bigboateng/browserstate.git"
+    "url": "https://github.com/browserstate-org/browserstate.git"
+  },
+  "homepage": "https://browserstate.io",
+  "bugs": {
+    "url": "https://github.com/browserstate-org/browserstate/issues"
   },
   "keywords": [
     "browser",
