@@ -1,0 +1,65 @@
+name: TypeScript NPM Release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  publish-npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      
+      - name: Extract version from release
+        id: extract_version
+        run: |
+          RELEASE_TAG=${{ github.event.release.tag_name }}
+          # Remove 'v' prefix if present
+          VERSION=${RELEASE_TAG#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Install dependencies
+        run: |
+          cd typescript
+          npm ci
+      
+      - name: Build
+        run: |
+          cd typescript
+          npm run build
+      
+      - name: Update version
+        run: |
+          cd typescript
+          # Update package.json version to match the release
+          npm version ${{ steps.extract_version.outputs.version }} --no-git-tag-version
+      
+      - name: Publish to npm
+        run: |
+          cd typescript
+          npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      
+      - name: Create success comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🎉 Successfully published version ${{ steps.extract_version.outputs.version }} to npm!`
+            }) 
