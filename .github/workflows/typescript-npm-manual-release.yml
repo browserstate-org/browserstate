@@ -1,0 +1,94 @@
+name: TypeScript NPM Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version type (major, minor, patch)'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+      pre_release:
+        description: 'Is this a pre-release?'
+        required: false
+        default: false
+        type: boolean
+      release_notes:
+        description: 'Release notes'
+        required: false
+        type: string
+
+jobs:
+  publish-npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      
+      - name: Configure Git
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+      
+      - name: Install dependencies
+        run: |
+          cd typescript
+          npm ci
+      
+      - name: Build
+        run: |
+          cd typescript
+          npm run build
+      
+      - name: Update version and create tag
+        id: version
+        run: |
+          cd typescript
+          # Update version based on input
+          VERSION=$(npm version ${{ github.event.inputs.version_type }} --no-git-tag-version)
+          # Remove quotes from version string
+          VERSION="${VERSION//\"/}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Commit package.json changes
+          git add package.json
+          git commit -m "chore: bump version to $VERSION"
+          
+          # Create a new tag
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push --follow-tags
+      
+      - name: Publish to npm
+        run: |
+          cd typescript
+          npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          body: ${{ github.event.inputs.release_notes }}
+          prerelease: ${{ github.event.inputs.pre_release }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Notify success
+        run: |
+          echo "🎉 Successfully published version ${{ steps.version.outputs.version }} to npm!" 
