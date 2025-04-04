@@ -43,5 +43,7 @@ gcs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/bigboateng/browserstate"
-Issues = "https://github.com/bigboateng/browserstate/issues"
+Homepage = "https://browserstate.io"
+Documentation = "https://browserstate.io"
+Repository = "https://github.com/browserstate-org/browserstate"
+Issues = "https://github.com/browserstate-org/browserstate/issues"
