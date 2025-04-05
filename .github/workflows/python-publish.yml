@@ -96,16 +96,24 @@ jobs:
     
     - name: Commit version changes
       run: |
-        git add python/pyproject.toml
-        git commit -m "Bump Python package version to ${{ steps.version.outputs.new_version }}"
-        git push
+        # Check if there are changes to commit
+        git diff --exit-code --quiet python/pyproject.toml || {
+          git add python/pyproject.toml
+          git commit -m "Bump Python package version to ${{ steps.version.outputs.new_version }}"
+          git push
+        }
     
     - name: Create tag if not from release
       if: github.event_name == 'workflow_dispatch'
       run: |
-        TAG_NAME="python-v${{ steps.version.outputs.new_version }}"
-        git tag $TAG_NAME
-        git push origin $TAG_NAME
+        # Only create tag if we haven't already tagged this version
+        if ! git rev-parse "python-v${{ steps.version.outputs.new_version }}" >/dev/null 2>&1; then
+          TAG_NAME="python-v${{ steps.version.outputs.new_version }}"
+          git tag $TAG_NAME
+          git push origin $TAG_NAME
+        else
+          echo "Tag python-v${{ steps.version.outputs.new_version }} already exists, skipping tag creation"
+        fi
     
     - name: Output results
       run: |
