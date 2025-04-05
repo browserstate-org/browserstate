@@ -1,0 +1,120 @@
+name: Publish Python Package to GitHub Packages
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type (patch, minor, major)'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      version_override:
+        description: 'Override version (leave empty to auto-increment)'
+        required: false
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed to push version updates
+      packages: write  # Needed to publish packages
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # We need the full history for versioning
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build hatch semver wheel twine
+    
+    - name: Set Git identity
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+    
+    - name: Update version based on release type
+      id: version
+      run: |
+        cd python
+        
+        # Get current version from pyproject.toml
+        CURRENT_VERSION=$(grep -m 1 'version = ' pyproject.toml | cut -d'"' -f2 || echo "0.0.0")
+        echo "Current version: $CURRENT_VERSION"
+        
+        if [ -n "${{ github.event.inputs.version_override }}" ]; then
+          # Use the manually specified version
+          NEW_VERSION="${{ github.event.inputs.version_override }}"
+          echo "Using manual version override: $NEW_VERSION"
+        else
+          # Calculate new version based on release type
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          if [ "$RELEASE_TYPE" == "patch" ]; then
+            NEW_VERSION=$(python -c "import semver; print(semver.VersionInfo.parse('$CURRENT_VERSION').bump_patch())")
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            NEW_VERSION=$(python -c "import semver; print(semver.VersionInfo.parse('$CURRENT_VERSION').bump_minor())")
+          elif [ "$RELEASE_TYPE" == "major" ]; then
+            NEW_VERSION=$(python -c "import semver; print(semver.VersionInfo.parse('$CURRENT_VERSION').bump_major())")
+          else
+            NEW_VERSION="$CURRENT_VERSION"
+          fi
+          echo "Calculated new $RELEASE_TYPE version: $NEW_VERSION"
+        fi
+        
+        # Update version in pyproject.toml
+        sed -i "s/version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" pyproject.toml
+        
+        # Set output variable for later steps
+        echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+    
+    - name: Build package
+      run: |
+        cd python
+        python -m build
+    
+    - name: Publish package to GitHub Packages
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        user: __token__
+        password: ${{ secrets.GITHUB_TOKEN }}
+        repository-url: https://pip.pkg.github.com/browserstate-org
+        packages-dir: python/dist/
+        skip-existing: true
+    
+    - name: Commit version changes
+      run: |
+        # Check if there are changes to commit
+        git diff --exit-code --quiet python/pyproject.toml || {
+          git add python/pyproject.toml
+          git commit -m "Bump Python package version to ${{ steps.version.outputs.new_version }}"
+          git push
+        }
+    
+    - name: Create tag if not from release
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        # Only create tag if we haven't already tagged this version
+        if ! git rev-parse "python-v${{ steps.version.outputs.new_version }}" >/dev/null 2>&1; then
+          TAG_NAME="python-v${{ steps.version.outputs.new_version }}"
+          git tag $TAG_NAME
+          git push origin $TAG_NAME
+        else
+          echo "Tag python-v${{ steps.version.outputs.new_version }} already exists, skipping tag creation"
+        fi
+    
+    - name: Output results
+      run: |
+        echo "::notice::Python package version ${{ steps.version.outputs.new_version }} published successfully!" 
