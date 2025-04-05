@@ -108,16 +108,16 @@ import { BrowserState } from 'browserstate';
 
 // Initialize with any storage provider
 const browserState = new BrowserState({
-  userId: 'user123',
+  userId: 'enterprise-client-456',
   storageType: 'redis',  // or 'local', 's3', 'gcs'
   redisOptions: {
-    host: 'localhost',
+    host: 'localhost', // e.g., 'redis.internal.company.com'
     port: 6379,
   }
 });
 
 // Mount a session - returns path to use with your browser automation
-const userDataDir = await browserState.mount('my-session');
+const userDataDir = await browserState.mount('linkedin-recruitment-bot');
 
 // Use with Playwright, Puppeteer, etc.
 const browser = await chromium.launchPersistentContext(userDataDir, {
@@ -127,6 +127,61 @@ const browser = await chromium.launchPersistentContext(userDataDir, {
 // After your automation finishes, save changes
 await browser.close();
 await browserState.unmount();
+```
+
+---
+
+## 🌟 Example Use Cases
+
+### Healthcare Automation
+
+```typescript
+// For a healthcare organization's patient portal automation
+const patientPortalBot = new BrowserState({
+  userId: 'hospital-system-456',
+  storageType: 's3',
+  s3Options: { 
+    bucketName: 'secure-medical-automations',
+    region: 'us-east-1', // e.g., AWS region with HIPAA compliance
+  }
+});
+
+// Each medical provider has their own session for different insurance portals
+const unitedHealthcareSession = await patientPortalBot.mount('united-healthcare-claims-portal');
+const aetnaProviderSession = await patientPortalBot.mount('aetna-provider-portal');
+```
+
+### Recruiting & Talent Acquisition
+
+```typescript
+// For a recruiting team's LinkedIn automation
+const talentAcquisition = new BrowserState({
+  userId: 'recruiting-team-789',
+  storageType: 'redis',
+  redisOptions: { host: 'recruiting-cache.internal' }
+});
+
+// Separate sessions for different recruiting workflows
+const techTalentSession = await talentAcquisition.mount('software-engineer-outreach');
+const executiveSession = await talentAcquisition.mount('executive-search-2023');
+```
+
+### E-commerce & Data Analytics
+
+```typescript
+// For a marketing team monitoring competitor products
+const ecomTracker = new BrowserState({
+  userId: 'ecommerce-analytics-234',
+  storageType: 'gcs',
+  gcsOptions: { 
+    bucketName: 'retail-market-research',
+    projectID: 'your-project-id', // e.g., 'ecommerce-analytics-12345'
+  }
+});
+
+// Track different marketplaces with separate sessions
+const amazonTracking = await ecomTracker.mount('amazon-price-monitoring');
+const etsyTracking = await ecomTracker.mount('etsy-handmade-trends');
 ```
 
 ---
