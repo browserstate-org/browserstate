@@ -1,6 +1,14 @@
 import os
 import shutil
-from unittest.mock import MagicMock
+import pytest
+from unittest.mock import MagicMock, patch
+
+# Try to import GCS dependencies
+try:
+    from google.cloud import storage
+    HAS_GCS = True
+except ImportError:
+    HAS_GCS = False
 
 # Import the GCSStorage class
 from browserstate.storage.gcs_storage import GCSStorage
@@ -45,19 +53,29 @@ from browserstate.storage.gcs_storage import GCSStorage
     
 #     shutil.rmtree(downloaded_path, ignore_errors=True)
 
-def test_gcs_storage_error(monkeypatch, tmp_path, fake_gcs_client):
-    def error_list_blobs(*args, **kwargs):
-        raise Exception("Test exception")
-    fake_gcs_client.bucket.return_value.list_blobs = error_list_blobs
-    monkeypatch.setattr("browserstate.storage.gcs_storage.storage.Client", lambda **kwargs: fake_gcs_client)
+def test_gcs_storage_error(monkeypatch, tmp_path):
+    """Test GCS storage error handling when listing blobs."""
+    # Create a mock GCS client
+    fake_gcs_client = MagicMock()
+    mock_gcs = MagicMock()
+    mock_gcs.Client.return_value = fake_gcs_client
     
-    bucket_name = "fake_bucket"
-    storage = GCSStorage(bucket_name=bucket_name)
-    user_id = "gcs_user"
-    session_id = "session_gcs_error"
-    
-    downloaded_path = storage.download(user_id, session_id)
-    assert os.path.exists(downloaded_path)
-    # Expect an empty directory on error.
-    assert os.listdir(downloaded_path) == []
-    shutil.rmtree(downloaded_path, ignore_errors=True)
+    # Use multiple patches to ensure all imports are caught
+    with patch.dict('sys.modules', {'google.cloud.storage': mock_gcs}), \
+         patch('browserstate.utils.dynamic_import.google_cloud_storage', mock_gcs), \
+         patch('browserstate.storage.gcs_storage.google_cloud_storage', mock_gcs):
+        
+        def error_list_blobs(*args, **kwargs):
+            raise Exception("Test exception")
+        fake_gcs_client.bucket.return_value.list_blobs = error_list_blobs
+        
+        bucket_name = "fake_bucket"
+        storage = GCSStorage(bucket_name=bucket_name)
+        user_id = "gcs_user"
+        session_id = "session_gcs_error"
+        
+        downloaded_path = storage.download(user_id, session_id)
+        assert os.path.exists(downloaded_path)
+        # Expect an empty directory on error.
+        assert os.listdir(downloaded_path) == []
+        shutil.rmtree(downloaded_path, ignore_errors=True)

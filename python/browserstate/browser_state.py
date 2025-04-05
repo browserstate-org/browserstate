@@ -4,7 +4,7 @@ import uuid
 import logging
 from typing import Dict, List, Optional, Union
 
-from .storage import StorageProvider, LocalStorage, S3Storage, GCSStorage, RedisStorage
+from .storage import StorageProvider, LocalStorage
 
 class BrowserStateOptions:
     """Options for configuring BrowserState"""
@@ -54,12 +54,16 @@ class BrowserState:
         if options.storage_provider:
             self.storage = options.storage_provider
         elif options.s3_options:
-            # S3 storage
+            # S3 storage - import lazily
+            from .storage import S3Storage
             self.storage = S3Storage(**options.s3_options)
         elif options.gcs_options:
-            # Google Cloud Storage
+            # Google Cloud Storage - import lazily
+            from .storage import GCSStorage
             self.storage = GCSStorage(**options.gcs_options)
         elif options.redis_options:
+            # Redis storage - import lazily
+            from .storage import RedisStorage
             self.storage = RedisStorage(**options.redis_options)
         else:
             # Local storage (default)
