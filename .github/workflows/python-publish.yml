@@ -21,7 +21,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Needed to push version updates
+      contents: write  # Needed to create branches and PRs
+      pull-requests: write # Needed to create pull requests
     
     steps:
     - uses: actions/checkout@v4
@@ -83,16 +84,41 @@ jobs:
         python -m build
         echo "Package built successfully. Output in dist/ directory."
     
-    - name: Commit version changes
+    - name: Create branch for version update
       run: |
-        # Check if there are changes to commit
-        git diff --exit-code --quiet python/pyproject.toml || {
-          git add python/pyproject.toml
-          git commit -m "Bump Python package version to ${{ steps.version.outputs.new_version }}"
-          git push
-        }
+        # Create a new branch for the version update
+        BRANCH_NAME="python-version-${{ steps.version.outputs.new_version }}"
+        git checkout -b $BRANCH_NAME
+        
+        # Add and commit changes
+        git add python/pyproject.toml
+        git commit -m "Bump Python package version to ${{ steps.version.outputs.new_version }}"
+        
+        # Push the branch
+        git push -u origin $BRANCH_NAME
+        
+        echo "branch_name=$BRANCH_NAME" >> $GITHUB_ENV
     
-    - name: Create tag if not from release
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "Bump Python package version to ${{ steps.version.outputs.new_version }}"
+        title: "Bump Python package version to ${{ steps.version.outputs.new_version }}"
+        body: |
+          This PR updates the Python package version to ${{ steps.version.outputs.new_version }}
+          
+          ### Installation Instructions
+          ```bash
+          pip install git+https://github.com/browserstate-org/browserstate@python-v${{ steps.version.outputs.new_version }}#subdirectory=python
+          # Or with uv
+          uv pip install git+https://github.com/browserstate-org/browserstate@python-v${{ steps.version.outputs.new_version }}#subdirectory=python
+          ```
+        branch: ${{ env.branch_name }}
+        base: main
+        labels: python,version-bump,automated-pr
+    
+    - name: Create tag 
       run: |
         # Only create tag if we haven't already tagged this version
         if ! git rev-parse "python-v${{ steps.version.outputs.new_version }}" >/dev/null 2>&1; then
@@ -106,6 +132,7 @@ jobs:
     - name: Update installation instructions
       run: |
         echo "::notice::Python package version ${{ steps.version.outputs.new_version }} built successfully!"
+        echo "::notice::Pull request created to update version in main branch"
         echo "::notice::Installation Instructions:"
         echo "::notice::pip install git+https://github.com/browserstate-org/browserstate@python-v${{ steps.version.outputs.new_version }}#subdirectory=python"
         echo "::notice::uv pip install git+https://github.com/browserstate-org/browserstate@python-v${{ steps.version.outputs.new_version }}#subdirectory=python" 
