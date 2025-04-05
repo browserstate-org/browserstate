@@ -146,9 +146,9 @@ const patientPortalBot = new BrowserState({
   }
 });
 
-// Each medical provider has their own session
-const drJohnsonSession = await patientPortalBot.mount('dr-johnson-patient-records');
-const drSmithSession = await patientPortalBot.mount('dr-smith-appointments');
+// Each medical provider has their own session for different insurance portals
+const unitedHealthcareSession = await patientPortalBot.mount('united-healthcare-claims-portal');
+const aetnaProviderSession = await patientPortalBot.mount('aetna-provider-portal');
 ```
 
 ### Recruiting & Talent Acquisition
