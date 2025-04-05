@@ -85,14 +85,34 @@ jobs:
         cd python
         python -m build
     
-    - name: Publish package to GitHub Packages
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        user: __token__
-        password: ${{ secrets.GITHUB_TOKEN }}
-        repository-url: https://pip.pkg.github.com/browserstate-org
-        packages-dir: python/dist/
-        skip-existing: true
+    - name: Configure PyPI
+      run: |
+        cat > ~/.pypirc << EOF
+        [distutils]
+        index-servers =
+            github
+
+        [github]
+        repository = https://upload.pypi.org/legacy/
+        username = __token__
+        password = ${{ secrets.GITHUB_TOKEN }}
+        EOF
+        
+        # Also configure pip
+        mkdir -p ~/.pip
+        cat > ~/.pip/pip.conf << EOF
+        [global]
+        extra-index-url = https://pypi.pkg.github.com/browserstate-org
+        EOF
+    
+    - name: Publish package directly with twine
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        TWINE_REPOSITORY_URL: https://pypi.pkg.github.com/browserstate-org
+      run: |
+        cd python
+        python -m twine upload --verbose dist/*
     
     - name: Commit version changes
       run: |
