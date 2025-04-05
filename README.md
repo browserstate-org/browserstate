@@ -82,13 +82,23 @@ Most browser automation workflows fail because authentication and session data d
 ## 📦 Installation & Quick Example
 
 ```bash
-# Install core package
+# TypeScript/JavaScript
 npm install browserstate
 
 # Optional dependencies based on storage provider
 npm install ioredis                                 # For Redis
 npm install @aws-sdk/client-s3 @aws-sdk/lib-storage # For S3
 npm install @google-cloud/storage                   # For GCS
+
+# Python (Pre-Release)
+# Option 1: Install from GitHub repository
+pip install git+https://github.com/browserstate-org/browserstate#subdirectory=python
+
+# Option 2: Install from GitHub Packages (recommended when available)
+pip install browserstate --index-url https://pip.pkg.github.com/browserstate-org
+
+# Using uv (faster alternative)
+uv pip install browserstate --index-url https://pip.pkg.github.com/browserstate-org
 ```
 
 ### Basic Usage
@@ -126,7 +136,7 @@ await browserState.unmount();
 For complete documentation, see the language-specific READMEs:
 
 - [✅ TypeScript Documentation](typescript/README.md) (Stable, production-ready)
-- [🔜 Python Documentation](python/README.md) (Coming Soon)
+- [🚧 Python Documentation](python/README.md) (Early development - installable from GitHub)
 
 ---
 
@@ -135,7 +145,7 @@ For complete documentation, see the language-specific READMEs:
 ```
 browserstate/
 ├── typescript/         # TypeScript implementation (stable)
-├── python/             # Python implementation (coming soon)
+├── python/             # Python implementation (early development)
 └── README.md           # This file
 ```
 
@@ -165,4 +175,4 @@ MIT
 - [🏠 Website](https://browserstate.io)
 - [📝 Issues](https://github.com/browserstate-org/browserstate/issues)
 
-BrowserState is part of an effort to build the foundation of reliable, persistent browser automation. If you're building bots, agents, or workflows—you want your browser to remember things. Now it can. 
+BrowserState is part of an effort to build the foundation of reliable, persistent browser automation. If you're building bots, agents, or workflows—you want your browser to remember things. Now it can.

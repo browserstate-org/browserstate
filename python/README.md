@@ -52,11 +52,61 @@ Now you can move fast without breaking sessions—or getting flagged as a bot.
 | Redis Storage | 🚧 In Development |
 | GCS Storage | 🚧 In Development |
 
-## Installation (Future)
+## Installation (Pre-Release)
+
+While BrowserState for Python is not yet available on PyPI, you can install it in several ways:
+
+### Using pip with GitHub repository
+```bash
+# Install directly from GitHub repository
+pip install git+https://github.com/browserstate-org/browserstate#subdirectory=python
+```
+
+### Using GitHub Packages (recommended)
+Once we publish to GitHub Packages, you'll be able to install it using:
 
 ```bash
-# Coming soon
+# Install directly from GitHub Packages (for public packages)
+pip install browserstate --index-url https://pip.pkg.github.com/browserstate-org
+
+# Using uv
+uv pip install browserstate --index-url https://pip.pkg.github.com/browserstate-org
+```
+
+For permanent configuration, add this to your pip configuration:
+```bash
+pip config set global.extra-index-url https://pip.pkg.github.com/browserstate-org
+```
+
+### Using uv (faster alternative)
+```bash
+# First install uv if you don't have it
+pip install uv
+# Or with pipx for isolated installation
+pipx install uv
+
+# Then install browserstate from GitHub
+uv pip install git+https://github.com/browserstate-org/browserstate#subdirectory=python
+```
+
+### From source
+```bash
+# Clone the repository
+git clone https://github.com/browserstate-org/browserstate
+cd browserstate/python
+
+# Install with pip
+pip install .
+
+# Or with uv
+uv pip install .
+```
+
+Once the package is officially released on PyPI, you'll be able to install it with:
+```bash
 pip install browserstate
+# or
+uv pip install browserstate
 ```
 
 ## Want to be notified when Python support is released?

@@ -47,3 +47,13 @@ Homepage = "https://browserstate.io"
 Documentation = "https://browserstate.io"
 Repository = "https://github.com/browserstate-org/browserstate"
 Issues = "https://github.com/browserstate-org/browserstate/issues"
+"GitHub Packages" = "https://github.com/browserstate-org/browserstate/packages"
+
+[tool.hatch.build.targets.wheel]
+packages = ["browserstate"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "README.md",
+    "browserstate/**/*.py",
+]
