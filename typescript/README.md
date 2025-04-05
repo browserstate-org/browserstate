@@ -65,7 +65,7 @@ import { BrowserState } from 'browserstate';
 
 // Local storage
 const localBrowserState = new BrowserState({
-  userId: 'user123',
+  userId: 'marketing-team-789',
   storageType: 'local',
   localOptions: {
     storagePath: '/path/to/local/storage'
@@ -74,7 +74,7 @@ const localBrowserState = new BrowserState({
 
 // AWS S3 storage
 const s3BrowserState = new BrowserState({
-  userId: 'user123',
+  userId: 'e-commerce-platform-234',
   storageType: 's3',
   s3Options: {
     bucketName: 'my-browser-states',
@@ -86,7 +86,7 @@ const s3BrowserState = new BrowserState({
 
 // Google Cloud Storage
 const gcsBrowserState = new BrowserState({
-  userId: 'user123',
+  userId: 'healthcare-org-567',
   storageType: 'gcs',
   gcsOptions: {
     bucketName: 'my-browser-states',
@@ -97,7 +97,7 @@ const gcsBrowserState = new BrowserState({
 
 // With autoCleanup disabled
 const longRunningBrowserState = new BrowserState({
-  userId: 'user123',
+  userId: 'data-analytics-team-901',
   storageType: 'local',
   autoCleanup: false, // Disable automatic cleanup
   localOptions: {
@@ -112,7 +112,7 @@ async function example() {
   // For local storage: Uses the existing session or creates a new one
   // Returns the path to the local directory containing the browser profile
   // This path must be used when launching the browser
-  const userDataDir = await browserState.mount('session123');
+  const userDataDir = await browserState.mount('facebook-ads-manager');
 
   // Your browser automation code here...
 
@@ -189,7 +189,7 @@ You can disable this automatic cleanup by setting `autoCleanup: false` in the co
 
 ```typescript
 const browserState = new BrowserState({
-  userId: 'user123',
+  userId: 'recruiting-automation-123',
   storageType: 'local',
   autoCleanup: false,
   localOptions: {
@@ -197,7 +197,6 @@ const browserState = new BrowserState({
   }
 });
 ```
-
 When automatic cleanup is disabled, you can manually clean up temporary files by calling:
 
 ```typescript
@@ -307,16 +306,3 @@ npm install browserstate@
 
 Canary releases are pre-release versions that may contain breaking changes or experimental features. Use with caution in production environments.
 
-## Canary Releases
-
-To install the latest canary version:
-```bash
-npm install browserstate@canary
-```
-
-To install a specific canary version:
-```bash
-npm install browserstate@
-```
-
-Canary releases are pre-release versions that may contain breaking changes or experimental features. Use with caution in production environments.
