@@ -159,10 +159,10 @@ function isZipEntrySafe(entryPath: string, targetDir: string): boolean {
   // Normalize paths to handle different path formats
   const normalizedTarget = path.normalize(targetDir);
   const resolvedPath = path.resolve(normalizedTarget, entryPath);
-  
+
   // Check if the resolved path is within the target directory
   // Use relative path to check if it goes outside the target
-  return !path.relative(normalizedTarget, resolvedPath).startsWith('..');
+  return !path.relative(normalizedTarget, resolvedPath).startsWith("..");
 }
 
 /**
@@ -201,12 +201,14 @@ export class RedisStorageProvider implements StorageProvider {
    */
   constructor(options: RedisStorageOptions) {
     this.keyPrefix = options.keyPrefix || "browserstate";
-    
+
     // Validate keyPrefix format
-    if (this.keyPrefix.includes(':')) {
-      throw new Error("keyPrefix must not contain colons (:). The implementation automatically builds Redis keys in the format: {prefix}:{userId}:{sessionId}");
+    if (this.keyPrefix.includes(":")) {
+      throw new Error(
+        "keyPrefix must not contain colons (:). The implementation automatically builds Redis keys in the format: {prefix}:{userId}:{sessionId}",
+      );
     }
-    
+
     this.tempDir = options.tempDir || os.tmpdir();
     this.ttl = options.ttl;
     this.options = options;
@@ -276,10 +278,10 @@ export class RedisStorageProvider implements StorageProvider {
 
   private getSessionKey(userId: string, sessionId: string): string {
     // Validate that userId and sessionId don't contain colons
-    if (userId.includes(':')) {
+    if (userId.includes(":")) {
       throw new Error("userId must not contain colons (:)");
     }
-    if (sessionId.includes(':')) {
+    if (sessionId.includes(":")) {
       throw new Error("sessionId must not contain colons (:)");
     }
     return `${this.keyPrefix}:${userId}:${sessionId}`;
@@ -365,7 +367,7 @@ export class RedisStorageProvider implements StorageProvider {
 
       // Extract the zip file to the user data directory
       console.log(`[Redis] Extracting zip to ${userDataDir}`);
-      const options: ExtractOptions = { 
+      const options: ExtractOptions = {
         dir: userDataDir,
         // Add onEntry callback to prevent ZIP slip vulnerability
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -373,9 +375,11 @@ export class RedisStorageProvider implements StorageProvider {
           // Ensure the entry's path doesn't escape the target directory (ZIP slip protection)
           const fileName = entry.fileName;
           if (!isZipEntrySafe(fileName, userDataDir)) {
-            throw new Error(`Security risk: ZIP entry "${fileName}" is outside extraction directory`);
+            throw new Error(
+              `Security risk: ZIP entry "${fileName}" is outside extraction directory`,
+            );
           }
-        }
+        },
       };
       await extractZip(zipFilePath, options);
 
@@ -566,7 +570,7 @@ export class RedisStorageProvider implements StorageProvider {
     }
 
     // Validate userId
-    if (userId.includes(':')) {
+    if (userId.includes(":")) {
       throw new Error("userId must not contain colons (:)");
     }
 
@@ -575,7 +579,9 @@ export class RedisStorageProvider implements StorageProvider {
 
     return keys
       .map((key: string) => {
-        const match = key.match(new RegExp(`${this.keyPrefix}:${userId}:(.+?)(?::metadata)?$`));
+        const match = key.match(
+          new RegExp(`${this.keyPrefix}:${userId}:(.+?)(?::metadata)?$`),
+        );
         return match ? match[1] : "";
       })
       .filter(Boolean)
