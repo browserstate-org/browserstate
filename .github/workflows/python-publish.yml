@@ -1,8 +1,6 @@
-name: Publish Python Package to GitHub Packages
+name: Python Package Version Bump and Build
 
 on:
-  release:
-    types: [created]
   workflow_dispatch:
     inputs:
       release_type:
@@ -24,7 +22,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Needed to push version updates
-      packages: write  # Needed to publish packages
     
     steps:
     - uses: actions/checkout@v4
@@ -39,7 +36,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install build hatch semver wheel twine
+        pip install build hatch semver wheel
     
     - name: Set Git identity
       run: |
@@ -84,15 +81,7 @@ jobs:
       run: |
         cd python
         python -m build
-    
-    - name: Publish package to GitHub Packages
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        user: __token__
-        password: ${{ secrets.GITHUB_TOKEN }}
-        repository-url: https://pip.pkg.github.com/browserstate-org
-        packages-dir: python/dist/
-        skip-existing: true
+        echo "Package built successfully. Output in dist/ directory."
     
     - name: Commit version changes
       run: |
@@ -104,7 +93,6 @@ jobs:
         }
     
     - name: Create tag if not from release
-      if: github.event_name == 'workflow_dispatch'
       run: |
         # Only create tag if we haven't already tagged this version
         if ! git rev-parse "python-v${{ steps.version.outputs.new_version }}" >/dev/null 2>&1; then
@@ -115,6 +103,9 @@ jobs:
           echo "Tag python-v${{ steps.version.outputs.new_version }} already exists, skipping tag creation"
         fi
     
-    - name: Output results
+    - name: Update installation instructions
       run: |
-        echo "::notice::Python package version ${{ steps.version.outputs.new_version }} published successfully!" 
+        echo "::notice::Python package version ${{ steps.version.outputs.new_version }} built successfully!"
+        echo "::notice::Installation Instructions:"
+        echo "::notice::pip install git+https://github.com/browserstate-org/browserstate@python-v${{ steps.version.outputs.new_version }}#subdirectory=python"
+        echo "::notice::uv pip install git+https://github.com/browserstate-org/browserstate@python-v${{ steps.version.outputs.new_version }}#subdirectory=python" 
