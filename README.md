@@ -1,9 +1,33 @@
 # 🌐 BrowserState
 
-**BrowserState** is a cross-language library for saving and restoring full browser profiles across machines and environments.  
-It lets your automation behave like a **real, returning user** by persisting cookies, local storage, IndexedDB, service worker caches, and more.
+BrowserState is a cross-language library for saving and restoring full browser profiles across machines and environments. It helps your automation behave like a **real, returning user** by persisting cookies, local storage, IndexedDB, and more.
 
-> Supports Local, Redis, S3, and GCS backends. Works with Playwright, Puppeteer, Browser Use, Nova Act, and more.
+[![npm version](https://img.shields.io/npm/v/browserstate.svg)](https://www.npmjs.com/package/browserstate)
+[![npm downloads](https://img.shields.io/npm/dm/browserstate.svg)](https://www.npmjs.com/package/browserstate)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+> Perfect for Playwright, Puppeteer, AI browser agents, and other browser automation frameworks. Eliminate login/auth problems and reduce bot detection risks.
+
+<p align="center">
+  <a href="https://playwright.dev" title="Playwright"><img src="https://playwright.dev/img/playwright-logo.svg" alt="Playwright" height="40"></a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="https://pptr.dev" title="Puppeteer"><img src="https://user-images.githubusercontent.com/10379601/29446482-04f7036a-841f-11e7-9872-91d1fc2ea683.png" alt="Puppeteer" height="40"></a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="https://www.selenium.dev" title="Selenium"><img src="https://cdn.jsdelivr.net/gh/SeleniumHQ/www.seleniumhq.org@master/src/main/webapp/images/selenium-logo.png" alt="Selenium" height="40"></a>
+</p>
+
+<p align="center">
+  <a href="#" title="Chrome"><img src="https://raw.githubusercontent.com/alrra/browser-logos/main/src/chrome/chrome.svg" alt="Chrome" height="40"></a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="#" title="Firefox"><img src="https://raw.githubusercontent.com/alrra/browser-logos/main/src/firefox/firefox.svg" alt="Firefox" height="40"></a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="#" title="Edge"><img src="https://raw.githubusercontent.com/alrra/browser-logos/main/src/edge/edge.svg" alt="Edge" height="40"></a>
+</p>
+
+```bash
+# Install
+npm install browserstate
+```
 
 ---
 
@@ -47,99 +71,52 @@ Most browser automation workflows fail because authentication and session data d
 
 | Feature | TypeScript | Python |
 |---------|------------|--------|
-| Local Storage | ✅ Stable | ✅ Stable |
-| Redis Storage | ✅ Stable | ✅ Stable |
-| AWS S3 | ✅ Stable (needs more testing) | ✅ Stable (needs more testing) |
-| Google Cloud Storage | ✅ Stable | ✅ Stable (needs more testing) |
+| Local Storage | ✅ Stable | 🔜 Coming Soon |
+| Redis Storage | ✅ Stable | 🔜 Coming Soon |
+| AWS S3 | ✅ Stable | 🔜 Coming Soon |
+| Google Cloud Storage | ✅ Stable | 🔜 Coming Soon |
 | Browser Compatibility | Chrome, Firefox, Edge | Chrome, Firefox, Edge |
 
 ---
 
-## 📦 Installation
+## 📦 Installation & Quick Example
 
-### TypeScript/JavaScript
 ```bash
+# Install core package
 npm install browserstate
 
 # Optional dependencies based on storage provider
-npm install @aws-sdk/client-s3 @aws-sdk/lib-storage  # For S3
-npm install @google-cloud/storage                     # For GCS
-npm install ioredis                                   # For Redis
+npm install ioredis                                 # For Redis
+npm install @aws-sdk/client-s3 @aws-sdk/lib-storage # For S3
+npm install @google-cloud/storage                   # For GCS
 ```
 
-### Python
-```bash
-pip install browserstate
+### Basic Usage
 
-# Optional dependencies based on storage provider
-pip install boto3                    # For S3
-pip install google-cloud-storage     # For GCS
-pip install redis                    # For Redis
-```
-
----
-
-## 🔌 Quick Examples
-
-### TypeScript with Redis
 ```typescript
 import { BrowserState } from 'browserstate';
 
+// Initialize with any storage provider
 const browserState = new BrowserState({
   userId: 'user123',
-  storageType: 'redis',
+  storageType: 'redis',  // or 'local', 's3', 'gcs'
   redisOptions: {
     host: 'localhost',
     port: 6379,
-    db: 0,
-    keyPrefix: 'browserstate:',
-    ttl: 7 * 24 * 60 * 60, // 7 days
   }
 });
 
-// Mount a session - returns the path to use with your browser automation
-const userDataDir = await browserState.mount('session123');
+// Mount a session - returns path to use with your browser automation
+const userDataDir = await browserState.mount('my-session');
 
-// Use with Playwright
+// Use with Playwright, Puppeteer, etc.
 const browser = await chromium.launchPersistentContext(userDataDir, {
-  // your options here
+  headless: false,
 });
 
-// After your automation finishes
+// After your automation finishes, save changes
 await browser.close();
-
-// Save changes back to Redis
 await browserState.unmount();
-```
-
-### Python with Local Storage
-```python
-from browserstate import BrowserState
-
-browser_state = BrowserState(
-    user_id="user123",
-    storage_type="local",
-    local_options={
-        "storage_path": "/path/to/storage"
-    }
-)
-
-# Mount a session
-user_data_dir = browser_state.mount("session123")
-
-# Use with Playwright
-from playwright.sync_api import sync_playwright
-
-with sync_playwright() as p:
-    browser = p.chromium.launch_persistent_context(
-        user_data_dir=user_data_dir,
-        headless=False
-    )
-    # Your automation code here
-    browser.close()
-
-# Save changes
-browser_state.unmount()
 ```
 
 ---
@@ -148,8 +125,8 @@ browser_state.unmount()
 
 For complete documentation, see the language-specific READMEs:
 
-- [TypeScript Documentation](typescript/README.md)
-- [Python Documentation](python/README.md)
+- [✅ TypeScript Documentation](typescript/README.md) (Stable, production-ready)
+- [🔜 Python Documentation](python/README.md) (Coming Soon)
 
 ---
 
@@ -157,23 +134,10 @@ For complete documentation, see the language-specific READMEs:
 
 ```
 browserstate/
-├── typescript/         # TypeScript implementation
-├── python/             # Python implementation
+├── typescript/         # TypeScript implementation (stable)
+├── python/             # Python implementation (coming soon)
 └── README.md           # This file
 ```
-
----
-
-## 🧹 Automatic Cleanup
-
-BrowserState creates temporary files on your local system when working with browser profiles. By default, these are automatically cleaned up when:
-
-1. You call `unmount()` to save the session
-2. The process exits normally
-3. The process is terminated with SIGINT (Ctrl+C)
-4. An uncaught exception occurs
-
-This behavior can be configured through the `autoCleanup` option.
 
 ---
 
@@ -181,28 +145,11 @@ This behavior can be configured through the `autoCleanup` option.
 
 Contributions are welcome! Areas where we especially appreciate help:
 
-- Additional real-world testing of storage providers
-- Performance optimizations
-- New storage backend implementations
+- Additional storage backend implementations
 - Browser compatibility testing
+- Performance optimizations
+- Cross-language interoperability testing
 - CLI wrappers for easier adoption
-
-Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
----
-
-## 🐛 Issues and Support
-
-If you encounter any problems:
-
-1. Check the documentation for your language implementation
-2. Search existing GitHub issues
-3. Create a new issue with:
-   - Which language you're using (TypeScript/Python)
-   - Which storage provider you're using
-   - Steps to reproduce the issue
-   - Expected vs. actual behavior
-   - Environment details (browser, OS, etc.)
 
 ---
 
@@ -211,5 +158,11 @@ If you encounter any problems:
 MIT
 
 ---
+
+## 🔗 Links
+
+- [📦 npm package](https://www.npmjs.com/package/browserstate)
+- [🏠 Website](https://browserstate.io)
+- [📝 Issues](https://github.com/browserstate-org/browserstate/issues)
 
 BrowserState is part of an effort to build the foundation of reliable, persistent browser automation. If you're building bots, agents, or workflows—you want your browser to remember things. Now it can. 
