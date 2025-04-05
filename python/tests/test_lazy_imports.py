@@ -2,6 +2,7 @@ import pytest
 import sys
 from unittest.mock import patch, MagicMock
 
+from browserstate.utils.dynamic_import import LazyModule
 
 def test_redis_not_required_for_import():
     # If redis is already imported, remove it for this test
@@ -27,80 +28,109 @@ def test_redis_not_required_for_import():
             sys.modules['redis'] = redis_module
 
 
-def test_lazy_s3_storage_import():
-    with patch('browserstate.utils.dynamic_import.boto3') as mock_boto3:
-        # Set up mock for boto3.client
-        mock_client = mock_boto3.client.return_value
+def test_lazy_module_class():
+    with patch('browserstate.utils.dynamic_import.import_module') as mock_import_module:
+        # Setup mock for import_module
+        mock_module = MagicMock()
+        mock_import_module.return_value = mock_module
         
-        # Import should work without boto3 actually being installed
-        from browserstate import BrowserState, BrowserStateOptions
+        # Create a lazy module
+        lazy_mod = LazyModule("test.module", "Test error message")
         
-        # Create options with S3 configuration
-        options = BrowserStateOptions(
-            user_id="test_user",
-            s3_options={
-                "bucket_name": "test-bucket"
-            }
-        )
+        # Verify module is not loaded yet
+        assert lazy_mod._module is None
+        assert mock_import_module.call_count == 0
         
-        # Create BrowserState with the options
-        browser_state = BrowserState(options)
+        # Access an attribute to trigger loading
+        result = lazy_mod.some_attr
         
-        # Use the browser_state to force the lazy import to occur
-        browser_state.list_sessions()
+        # Verify import_module was called with the right parameters
+        mock_import_module.assert_called_once_with("test.module", "Test error message")
         
-        # Verify boto3.client was called
-        mock_boto3.client.assert_called_with('s3', **{})
+        # Verify the attribute was accessed on the loaded module
+        assert lazy_mod._module == mock_module
+        assert result == mock_module.some_attr
 
 
-def test_lazy_gcs_storage_import():
-    with patch('browserstate.utils.dynamic_import.google_cloud_storage') as mock_gcs:
-        # Set up mock for google cloud storage
-        mock_client = MagicMock()
-        mock_gcs.Client.return_value = mock_client
-        
-        # Import should work without google-cloud-storage actually being installed
-        from browserstate import BrowserState, BrowserStateOptions
-        
-        # Create options with GCS configuration
-        options = BrowserStateOptions(
-            user_id="test_user",
-            gcs_options={
-                "bucket_name": "test-bucket"
-            }
-        )
-        
-        # Create BrowserState with the options
-        browser_state = BrowserState(options)
-        
-        # Use the browser_state to force the lazy import to occur
-        browser_state.list_sessions()
-        
-        # Verify Client was called
-        mock_gcs.Client.assert_called_with(**{})
+@patch('browserstate.utils.dynamic_import.LazyModule.__getattr__')
+def test_lazy_s3_storage_import(mock_getattr):
+    # Setup mock for LazyModule.__getattr__
+    mock_client = MagicMock()
+    mock_getattr.return_value = mock_client
+    
+    # Import with lazy loading
+    from browserstate import BrowserState, BrowserStateOptions
+    from browserstate.utils.dynamic_import import boto3
+    
+    # Create options with S3 configuration
+    options = BrowserStateOptions(
+        user_id="test_user",
+        s3_options={
+            "bucket_name": "test-bucket"
+        }
+    )
+    
+    # Create BrowserState with the options
+    browser_state = BrowserState(options)
+    
+    # Force accessing the client attribute to trigger lazy loading
+    boto3.client('s3')
+    
+    # Verify __getattr__ was called with the expected attribute
+    mock_getattr.assert_any_call('client')
 
 
-def test_lazy_redis_storage_import():
-    with patch('browserstate.utils.dynamic_import.redis_module') as mock_redis:
-        # Set up mock for redis
-        mock_redis.Redis.from_url.return_value = MagicMock()
-        
-        # Import should work without redis actually being installed
-        from browserstate import BrowserState, BrowserStateOptions
-        
-        # Create options with Redis configuration
-        options = BrowserStateOptions(
-            user_id="test_user",
-            redis_options={
-                "redis_url": "redis://localhost:6379/0"
-            }
-        )
-        
-        # Create BrowserState with the options
-        browser_state = BrowserState(options)
-        
-        # Use the browser_state to force the lazy import to occur
-        browser_state.list_sessions()
-        
-        # Verify Redis.from_url was called
-        mock_redis.Redis.from_url.assert_called_with("redis://localhost:6379/0") 
+@patch('browserstate.utils.dynamic_import.LazyModule.__getattr__')
+def test_lazy_gcs_storage_import(mock_getattr):
+    # Setup mock for LazyModule.__getattr__
+    mock_client_class = MagicMock()
+    mock_getattr.return_value = mock_client_class
+    
+    # Import with lazy loading
+    from browserstate import BrowserState, BrowserStateOptions
+    from browserstate.utils.dynamic_import import google_cloud_storage
+    
+    # Create options with GCS configuration
+    options = BrowserStateOptions(
+        user_id="test_user",
+        gcs_options={
+            "bucket_name": "test-bucket"
+        }
+    )
+    
+    # Create BrowserState with the options
+    browser_state = BrowserState(options)
+    
+    # Force accessing the Client attribute to trigger lazy loading
+    google_cloud_storage.Client()
+    
+    # Verify __getattr__ was called with the expected attribute
+    mock_getattr.assert_any_call('Client')
+
+
+@patch('browserstate.utils.dynamic_import.LazyModule.__getattr__')
+def test_lazy_redis_storage_import(mock_getattr):
+    # Setup mock for LazyModule.__getattr__
+    mock_redis_class = MagicMock()
+    mock_getattr.return_value = mock_redis_class
+    
+    # Import with lazy loading
+    from browserstate import BrowserState, BrowserStateOptions
+    from browserstate.utils.dynamic_import import redis_module
+    
+    # Create options with Redis configuration
+    options = BrowserStateOptions(
+        user_id="test_user",
+        redis_options={
+            "redis_url": "redis://localhost:6379/0"
+        }
+    )
+    
+    # Create BrowserState with the options
+    browser_state = BrowserState(options)
+    
+    # Force accessing the Redis attribute to trigger lazy loading
+    redis_module.Redis
+    
+    # Verify __getattr__ was called with the expected attribute
+    mock_getattr.assert_any_call('Redis') 

@@ -14,6 +14,7 @@ _module_cache: Dict[str, Any] = {}
 # Dependency error messages
 DEPENDENCY_ERRORS = {
     "boto3": "Please run: pip install boto3",
+    "botocore": "Please run: pip install boto3",
     "google.cloud.storage": "Please run: pip install google-cloud-storage",
     "redis": "Please run: pip install redis"
 }
@@ -75,5 +76,6 @@ class LazyModule:
 
 # Create lazy module loaders for common dependencies
 boto3 = LazyModule("boto3", DEPENDENCY_ERRORS["boto3"])
+botocore = LazyModule("botocore", DEPENDENCY_ERRORS["botocore"])
 google_cloud_storage = LazyModule("google.cloud.storage", DEPENDENCY_ERRORS["google.cloud.storage"])
 redis_module = LazyModule("redis", DEPENDENCY_ERRORS["redis"]) 

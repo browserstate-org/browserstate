@@ -3,9 +3,8 @@ import shutil
 import logging
 from typing import List, Optional
 import tempfile
-# Import boto3 lazily
-from ..utils.dynamic_import import boto3
-from botocore.exceptions import ClientError
+# Import boto3 and botocore lazily
+from ..utils.dynamic_import import boto3, botocore
 
 from .storage_provider import StorageProvider
 

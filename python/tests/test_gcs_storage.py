@@ -1,6 +1,6 @@
 import os
 import shutil
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 # Import the GCSStorage class
 from browserstate.storage.gcs_storage import GCSStorage
@@ -45,11 +45,17 @@ from browserstate.storage.gcs_storage import GCSStorage
     
 #     shutil.rmtree(downloaded_path, ignore_errors=True)
 
-def test_gcs_storage_error(monkeypatch, tmp_path, fake_gcs_client):
+@patch('browserstate.utils.dynamic_import.import_module')
+def test_gcs_storage_error(mock_import_module, monkeypatch, tmp_path):
+    # Create a mock GCS client
+    fake_gcs_client = MagicMock()
+    mock_gcs = MagicMock()
+    mock_gcs.Client.return_value = fake_gcs_client
+    mock_import_module.return_value = mock_gcs
+    
     def error_list_blobs(*args, **kwargs):
         raise Exception("Test exception")
     fake_gcs_client.bucket.return_value.list_blobs = error_list_blobs
-    monkeypatch.setattr("browserstate.utils.dynamic_import.google_cloud_storage.Client", lambda **kwargs: fake_gcs_client)
     
     bucket_name = "fake_bucket"
     storage = GCSStorage(bucket_name=bucket_name)
