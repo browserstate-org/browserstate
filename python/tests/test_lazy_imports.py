@@ -1,6 +1,6 @@
 import pytest
 import sys
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 
 def test_redis_not_required_for_import():
@@ -46,6 +46,9 @@ def test_lazy_s3_storage_import():
         # Create BrowserState with the options
         browser_state = BrowserState(options)
         
+        # Use the browser_state to force the lazy import to occur
+        browser_state.list_sessions()
+        
         # Verify boto3.client was called
         mock_boto3.client.assert_called_with('s3', **{})
 
@@ -53,8 +56,8 @@ def test_lazy_s3_storage_import():
 def test_lazy_gcs_storage_import():
     with patch('browserstate.utils.dynamic_import.google_cloud_storage') as mock_gcs:
         # Set up mock for google cloud storage
-        mock_storage = mock_gcs.storage
-        mock_client = mock_storage.Client.return_value
+        mock_client = MagicMock()
+        mock_gcs.Client.return_value = mock_client
         
         # Import should work without google-cloud-storage actually being installed
         from browserstate import BrowserState, BrowserStateOptions
@@ -70,14 +73,17 @@ def test_lazy_gcs_storage_import():
         # Create BrowserState with the options
         browser_state = BrowserState(options)
         
-        # Verify storage.Client was called
-        mock_storage.Client.assert_called_with(**{})
+        # Use the browser_state to force the lazy import to occur
+        browser_state.list_sessions()
+        
+        # Verify Client was called
+        mock_gcs.Client.assert_called_with(**{})
 
 
 def test_lazy_redis_storage_import():
     with patch('browserstate.utils.dynamic_import.redis_module') as mock_redis:
         # Set up mock for redis
-        mock_redis_client = mock_redis.Redis
+        mock_redis.Redis.from_url.return_value = MagicMock()
         
         # Import should work without redis actually being installed
         from browserstate import BrowserState, BrowserStateOptions
@@ -92,6 +98,9 @@ def test_lazy_redis_storage_import():
         
         # Create BrowserState with the options
         browser_state = BrowserState(options)
+        
+        # Use the browser_state to force the lazy import to occur
+        browser_state.list_sessions()
         
         # Verify Redis.from_url was called
         mock_redis.Redis.from_url.assert_called_with("redis://localhost:6379/0") 

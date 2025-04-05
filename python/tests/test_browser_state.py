@@ -231,7 +231,7 @@ def test_browser_state_list_sessions_empty(local_storage_base):
     assert sessions == []
 
 
-@patch("browserstate.storage.gcs_storage.storage.Client", return_value=MagicMock())
+@patch("browserstate.utils.dynamic_import.google_cloud_storage.Client", return_value=MagicMock())
 def test_browser_state_options_priority(mock_gcs_client, local_storage_base):
     # 1) When storage_provider is specified.
     custom_provider = MagicMock()

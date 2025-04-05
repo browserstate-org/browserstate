@@ -49,7 +49,7 @@ def test_gcs_storage_error(monkeypatch, tmp_path, fake_gcs_client):
     def error_list_blobs(*args, **kwargs):
         raise Exception("Test exception")
     fake_gcs_client.bucket.return_value.list_blobs = error_list_blobs
-    monkeypatch.setattr("browserstate.storage.gcs_storage.storage.Client", lambda **kwargs: fake_gcs_client)
+    monkeypatch.setattr("browserstate.utils.dynamic_import.google_cloud_storage.Client", lambda **kwargs: fake_gcs_client)
     
     bucket_name = "fake_bucket"
     storage = GCSStorage(bucket_name=bucket_name)
