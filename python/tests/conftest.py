@@ -3,22 +3,8 @@ import shutil
 import tempfile
 import pytest
 from unittest.mock import MagicMock
-
-# Optional imports for tests
-boto3 = None
-fakeredis = None
-mock_aws = None
-
-try:
-    import boto3
-    from moto import mock_aws
-except ImportError:
-    pass
-
-try:
-    import fakeredis
-except ImportError:
-    pass
+import boto3
+from moto import mock_aws
 
 # Fixture: Dummy session directory with sample files.
 @pytest.fixture
@@ -49,21 +35,18 @@ def local_storage_base():
 # Fixture: Fake Redis instance (requires fakeredis).
 @pytest.fixture
 def fake_redis(monkeypatch):
-    if fakeredis is None:
+    try:
+        import fakeredis
+    except ImportError:
         pytest.skip("fakeredis not installed")
     fake = fakeredis.FakeRedis()
-    try:
-        from redis import Redis
-        monkeypatch.setattr(Redis, "from_url", lambda url: fake)
-    except ImportError:
-        pytest.skip("redis not installed")
+    from redis import Redis
+    monkeypatch.setattr(Redis, "from_url", lambda url: fake)
     return fake
 
 # Fixture: Fake S3 bucket (requires moto).
 @pytest.fixture
 def s3_bucket():
-    if boto3 is None or mock_aws is None:
-        pytest.skip("boto3 or moto not installed")
     with mock_aws():
         s3 = boto3.resource("s3", region_name="us-east-1")
         bucket_name = "test-bucket"

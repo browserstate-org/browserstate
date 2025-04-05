@@ -3,8 +3,8 @@ import shutil
 import logging
 from typing import List, Optional
 import tempfile
-# Import boto3 and botocore lazily
-from ..utils.dynamic_import import boto3, botocore
+import boto3
+from botocore.exceptions import ClientError
 
 from .storage_provider import StorageProvider
 
@@ -119,8 +119,10 @@ class S3Storage(StorageProvider):
                     
                     # Download file
                     self.s3_client.download_file(self.bucket_name, key, local_path)
-        except Exception as e:
+        except ClientError as e:
             logging.error(f"Error downloading from S3: {e}")
+            # Create empty directory for new sessions
+            pass
         
         return target_path
     
@@ -147,7 +149,7 @@ class S3Storage(StorageProvider):
                     
                     # Upload file
                     self.s3_client.upload_file(local_path, self.bucket_name, s3_key)
-        except Exception as e:
+        except ClientError as e:
             logging.error(f"Error uploading to S3: {e}")
             raise
     
@@ -181,7 +183,7 @@ class S3Storage(StorageProvider):
                     if session_id:
                         sessions.add(session_id)
                         
-        except Exception as e:
+        except ClientError as e:
             logging.error(f"Error listing sessions from S3: {e}")
             return []
         
@@ -205,14 +207,14 @@ class S3Storage(StorageProvider):
             )
             
             # If objects exist, delete them
-            if 'Contents' in response and response['Contents']:
+            if 'Contents' in response:
                 # Create a list of objects to delete
-                objects_to_delete = [{'Key': obj['Key']} for obj in response['Contents']]
+                objects = [{'Key': obj['Key']} for obj in response['Contents']]
                 
                 # Delete objects
                 self.s3_client.delete_objects(
                     Bucket=self.bucket_name,
-                    Delete={'Objects': objects_to_delete}
+                    Delete={'Objects': objects}
                 )
                 
                 # Check if there are more objects to delete (pagination)
@@ -224,11 +226,11 @@ class S3Storage(StorageProvider):
                     )
                     
                     if 'Contents' in response:
-                        objects_to_delete = [{'Key': obj['Key']} for obj in response['Contents']]
+                        objects = [{'Key': obj['Key']} for obj in response['Contents']]
                         self.s3_client.delete_objects(
                             Bucket=self.bucket_name,
-                            Delete={'Objects': objects_to_delete}
+                            Delete={'Objects': objects}
                         )
-        except Exception as e:
+        except ClientError as e:
             logging.error(f"Error deleting session from S3: {e}")
             raise 

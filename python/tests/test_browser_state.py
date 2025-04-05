@@ -231,30 +231,8 @@ def test_browser_state_list_sessions_empty(local_storage_base):
     assert sessions == []
 
 
-@patch('browserstate.utils.dynamic_import.import_module')
-def test_browser_state_options_priority(mock_import_module, local_storage_base):
-    # Set up mock return values for different import calls
-    def import_side_effect(module_name, error_message=None):
-        if module_name == 'google.cloud.storage':
-            mock_gcs = MagicMock()
-            mock_gcs.Client.return_value = MagicMock() 
-            return mock_gcs
-        elif module_name == 'boto3':
-            mock_boto3 = MagicMock()
-            mock_boto3.client.return_value = MagicMock()
-            return mock_boto3
-        elif module_name == 'redis':
-            mock_redis = MagicMock()
-            mock_redis.Redis.from_url.return_value = MagicMock()
-            return mock_redis
-        elif module_name == 'botocore':
-            return MagicMock()
-        
-        # Default case should not happen in this test
-        raise ImportError(f"Unexpected module import: {module_name}")
-    
-    mock_import_module.side_effect = import_side_effect
-    
+@patch("browserstate.storage.gcs_storage.storage.Client", return_value=MagicMock())
+def test_browser_state_options_priority(mock_gcs_client, local_storage_base):
     # 1) When storage_provider is specified.
     custom_provider = MagicMock()
     options = BrowserStateOptions(

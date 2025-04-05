@@ -10,12 +10,21 @@ import time
 import pathlib
 from typing import List
 
-# Import redis lazily
-from ..utils.dynamic_import import redis_module
+import redis  # Requires: pip install redis
 
 from .storage_provider import StorageProvider
 
 def is_zipfile_safe(zip_file_path: str, target_path: str) -> bool:
+    """
+    Check if a ZIP file is safe to extract (no directory traversal attacks).
+    
+    Args:
+        zip_file_path: Path to the ZIP file
+        target_path: Target extraction directory
+        
+    Returns:
+        True if the ZIP file is safe, False otherwise
+    """
     target_path = os.path.normpath(os.path.abspath(target_path))
     
     with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
@@ -38,6 +47,16 @@ def is_zipfile_safe(zip_file_path: str, target_path: str) -> bool:
     return True
 
 def safe_extract_zip(zip_file_path: str, target_path: str) -> None:
+    """
+    Safely extract a ZIP file, preventing directory traversal attacks.
+    
+    Args:
+        zip_file_path: Path to the ZIP file
+        target_path: Target extraction directory
+        
+    Raises:
+        ValueError: If the ZIP file contains unsafe entries
+    """
     # Check if ZIP is safe
     if not is_zipfile_safe(zip_file_path, target_path):
         raise ValueError("Security risk: ZIP file contains entries that would extract outside target directory")
@@ -66,7 +85,7 @@ class RedisStorage(StorageProvider):
         if ":" in key_prefix:
             raise ValueError("key_prefix must not contain colons (:). The implementation automatically builds Redis keys in the format: {prefix}:{userId}:{sessionId}")
             
-        self.redis_client = redis_module.Redis.from_url(redis_url)
+        self.redis_client = redis.Redis.from_url(redis_url)
         self.key_prefix = key_prefix
         logging.info(f"Redis storage initialized with prefix: {self.key_prefix}")
     
