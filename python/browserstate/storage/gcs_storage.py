@@ -4,11 +4,8 @@ import logging
 from typing import List, Optional
 import tempfile
 
-try:
-    from google.cloud import storage
-    from google.cloud.exceptions import NotFound
-except ImportError:
-    raise ImportError("Google Cloud Storage dependencies not installed. Install with: pip install google-cloud-storage")
+# Import GCS lazily
+from ..utils.dynamic_import import google_cloud_storage
 
 from .storage_provider import StorageProvider
 
@@ -38,7 +35,7 @@ class GCSStorage(StorageProvider):
         if service_account_path:
             client_kwargs['credentials'] = service_account_path
             
-        self.storage_client = storage.Client(**client_kwargs)
+        self.storage_client = google_cloud_storage.storage.Client(**client_kwargs)
         
         # Get bucket reference
         self.bucket = self.storage_client.bucket(bucket_name)

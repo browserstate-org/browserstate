@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "browserstate"
-version = "0.0.1"
+version = "0.0.2"
 authors = [
   { name="BrowserState Team", email="info@browserstate.dev" },
 ]
@@ -17,7 +17,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    # Runtime dependencies
+    # No runtime dependencies required for core functionality
 ]
 license = "MIT"
 license-files = ["LICENSE*"]
@@ -39,6 +39,13 @@ s3 = [
     "boto3>=1.26.0",
 ]
 gcs = [
+    "google-cloud-storage>=2.7.0",
+]
+
+# Convenience groups
+all = [
+    "redis>=4.5.0",
+    "boto3>=1.26.0",
     "google-cloud-storage>=2.7.0",
 ]
 
