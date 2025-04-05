@@ -1,8 +1,20 @@
 import os
 import filecmp
 import shutil
+import pytest
+from unittest.mock import patch, MagicMock
+
+# Conditionally import boto3/moto
+try:
+    import boto3
+    from moto import mock_aws
+    HAS_BOTO3 = True
+except ImportError:
+    HAS_BOTO3 = False
+
 from browserstate.storage.s3_storage import S3Storage
 
+@pytest.mark.skipif(not HAS_BOTO3, reason="boto3 or moto not installed")
 def test_s3_storage_upload_download(s3_bucket, dummy_session_dir):
     user_id = "s3_user"
     session_id = "session_s3"
@@ -28,6 +40,7 @@ def test_s3_storage_upload_download(s3_bucket, dummy_session_dir):
     assert session_id not in sessions_after
     shutil.rmtree(downloaded_path, ignore_errors=True)
 
+@pytest.mark.skipif(not HAS_BOTO3, reason="boto3 or moto not installed")
 def test_s3_storage_empty_session(s3_bucket):
     user_id = "s3_user"
     session_id = "nonexistent"

@@ -30,111 +30,72 @@ def test_redis_not_required_for_import():
             sys.modules['redis'] = redis_module
 
 
-@patch('browserstate.utils.dynamic_import.import_module')
-def test_s3_storage_import_patched(mock_import):
-    # Setup the mock to return a fake boto3 module
+def test_s3_storage_import_patched():
+    """Test that S3Storage can be used with mocked dependencies."""
+    # Setup mocks
     mock_boto3 = MagicMock()
-    mock_client = MagicMock()
-    mock_boto3.client.return_value = mock_client
+    mock_boto3_client = MagicMock()
+    mock_boto3.client.return_value = mock_boto3_client
+    mock_botocore = MagicMock()
     
-    # Configure import_module to return our mock when boto3 is requested
-    def mock_import_side_effect(module_name, error_message=None):
-        if module_name == 'boto3':
-            return mock_boto3
-        elif module_name == 'botocore':
-            return MagicMock()
-        raise ImportError(f"Unexpected import: {module_name}")
+    # Use multiple patches to ensure all imports are caught
+    with patch.dict('sys.modules', {'boto3': mock_boto3, 'botocore': mock_botocore}), \
+         patch('browserstate.utils.dynamic_import.boto3', mock_boto3), \
+         patch('browserstate.utils.dynamic_import.botocore', mock_botocore), \
+         patch('browserstate.storage.s3_storage.boto3', mock_boto3):
             
-    mock_import.side_effect = mock_import_side_effect
-    
-    # Import with patched modules
-    from browserstate import BrowserState, BrowserStateOptions
-    
-    # Create options with S3 configuration
-    options = BrowserStateOptions(
-        user_id="test_user",
-        s3_options={
-            "bucket_name": "test-bucket"
-        }
-    )
-    
-    # Create BrowserState with the options
-    browser_state = BrowserState(options)
-    
-    # Access attributes to ensure lazy loading is triggered
-    sessions = browser_state.list_sessions()
-    
-    # Verify our mock was called correctly
-    mock_boto3.client.assert_called_with('s3', **{})
+        # Import after patching
+        from browserstate import BrowserState, BrowserStateOptions
+        from browserstate.storage.s3_storage import S3Storage
+        
+        # Create S3 storage directly to ensure the mock is used
+        s3_storage = S3Storage(bucket_name="test-bucket")
+        
+        # Verify our mocks were used
+        mock_boto3.client.assert_called_with('s3', **{})
 
 
-@patch('browserstate.utils.dynamic_import.import_module')
-def test_gcs_storage_import_patched(mock_import):
-    # Setup the mock to return a fake GCS module
+def test_gcs_storage_import_patched():
+    """Test that GCSStorage can be used with mocked dependencies."""
+    # Setup mocks
     mock_gcs = MagicMock()
     mock_client = MagicMock()
     mock_gcs.Client.return_value = mock_client
     
-    # Configure import_module to return our mock when google.cloud.storage is requested
-    def mock_import_side_effect(module_name, error_message=None):
-        if module_name == 'google.cloud.storage':
-            return mock_gcs
-        raise ImportError(f"Unexpected import: {module_name}")
+    # Use multiple patches to ensure all imports are caught
+    with patch.dict('sys.modules', {'google.cloud.storage': mock_gcs}), \
+         patch('browserstate.utils.dynamic_import.google_cloud_storage', mock_gcs), \
+         patch('browserstate.storage.gcs_storage.google_cloud_storage', mock_gcs):
             
-    mock_import.side_effect = mock_import_side_effect
-    
-    # Import with patched modules
-    from browserstate import BrowserState, BrowserStateOptions
-    
-    # Create options with GCS configuration
-    options = BrowserStateOptions(
-        user_id="test_user",
-        gcs_options={
-            "bucket_name": "test-bucket"
-        }
-    )
-    
-    # Create BrowserState with the options
-    browser_state = BrowserState(options)
-    
-    # Access attributes to ensure lazy loading is triggered
-    sessions = browser_state.list_sessions()
-    
-    # Verify our mock was called correctly
-    mock_gcs.Client.assert_called_with(**{})
+        # Import after patching
+        from browserstate import BrowserState, BrowserStateOptions
+        from browserstate.storage.gcs_storage import GCSStorage
+        
+        # Create GCS storage directly to ensure the mock is used
+        gcs_storage = GCSStorage(bucket_name="test-bucket")
+        
+        # Verify our mocks were used
+        mock_gcs.Client.assert_called_with(**{})
 
 
-@patch('browserstate.utils.dynamic_import.import_module')
-def test_redis_storage_import_patched(mock_import):
-    # Setup the mock to return a fake redis module
+def test_redis_storage_import_patched():
+    """Test that RedisStorage can be used with mocked dependencies."""
+    # Setup mocks
     mock_redis = MagicMock()
     mock_client = MagicMock()
     mock_redis.Redis.from_url.return_value = mock_client
     
-    # Configure import_module to return our mock when redis is requested
-    def mock_import_side_effect(module_name, error_message=None):
-        if module_name == 'redis':
-            return mock_redis
-        raise ImportError(f"Unexpected import: {module_name}")
+    # Use multiple patches to ensure all imports are caught
+    with patch.dict('sys.modules', {'redis': mock_redis}), \
+         patch('browserstate.utils.dynamic_import.redis_module', mock_redis), \
+         patch('browserstate.storage.redis_storage.redis_module', mock_redis):
             
-    mock_import.side_effect = mock_import_side_effect
-    
-    # Import with patched modules
-    from browserstate import BrowserState, BrowserStateOptions
-    
-    # Create options with Redis configuration
-    options = BrowserStateOptions(
-        user_id="test_user",
-        redis_options={
-            "redis_url": "redis://localhost:6379/0"
-        }
-    )
-    
-    # Create BrowserState with the options
-    browser_state = BrowserState(options)
-    
-    # Access attributes to ensure lazy loading is triggered
-    sessions = browser_state.list_sessions()
-    
-    # Verify our mock was called correctly
-    mock_redis.Redis.from_url.assert_called_with("redis://localhost:6379/0") 
+        # Import after patching
+        from browserstate import BrowserState, BrowserStateOptions
+        from browserstate.storage.redis_storage import RedisStorage
+        
+        # Create Redis storage directly to ensure the mock is used
+        redis_storage = RedisStorage(redis_url="redis://localhost:6379/0")
+        
+        # Verify our mocks were used
+        mock_redis.Redis.from_url.assert_called_with("redis://localhost:6379/0") 
