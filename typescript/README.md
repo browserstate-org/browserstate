@@ -68,7 +68,7 @@ const localBrowserState = new BrowserState({
   userId: 'marketing-team-789',
   storageType: 'local',
   localOptions: {
-    storagePath: '/path/to/local/storage'
+    storagePath: '/path/to/local/storage' // e.g., './browser-states'
   }
 });
 
@@ -101,7 +101,16 @@ const longRunningBrowserState = new BrowserState({
   storageType: 'local',
   autoCleanup: false, // Disable automatic cleanup
   localOptions: {
-    storagePath: '/path/to/local/storage'
+    storagePath: '/path/to/local/storage' // e.g., './browser-states/long-running'
+  }
+});
+
+const browserState = new BrowserState({
+  userId: 'recruiting-automation-123',
+  storageType: 'local',
+  autoCleanup: false,
+  localOptions: {
+    storagePath: '/path/to/local/storage' // e.g., './browser-states/recruitment'
   }
 });
 
@@ -232,20 +241,6 @@ npm install browserstate@canary
 To install a specific canary version:
 ```bash
 npm install browserstate@0.3.0-canary.TIMESTAMP
-```
-
-Canary releases are pre-release versions that may contain breaking changes or experimental features. Use with caution in production environments.
-
-## Canary Releases
-
-To install the latest canary version:
-```bash
-npm install browserstate@canary
-```
-
-To install a specific canary version:
-```bash
-npm install browserstate@
 ```
 
 Canary releases are pre-release versions that may contain breaking changes or experimental features. Use with caution in production environments.

@@ -111,7 +111,7 @@ const browserState = new BrowserState({
   userId: 'enterprise-client-456',
   storageType: 'redis',  // or 'local', 's3', 'gcs'
   redisOptions: {
-    host: 'localhost',
+    host: 'localhost', // e.g., 'redis.internal.company.com'
     port: 6379,
   }
 });
@@ -140,7 +140,10 @@ await browserState.unmount();
 const patientPortalBot = new BrowserState({
   userId: 'hospital-system-456',
   storageType: 's3',
-  s3Options: { bucketName: 'secure-medical-automations' }
+  s3Options: { 
+    bucketName: 'secure-medical-automations',
+    region: 'us-east-1', // e.g., AWS region with HIPAA compliance
+  }
 });
 
 // Each medical provider has their own session
@@ -170,7 +173,10 @@ const executiveSession = await talentAcquisition.mount('executive-search-2023');
 const ecomTracker = new BrowserState({
   userId: 'ecommerce-analytics-234',
   storageType: 'gcs',
-  gcsOptions: { bucketName: 'retail-market-research' }
+  gcsOptions: { 
+    bucketName: 'retail-market-research',
+    projectID: 'your-project-id', // e.g., 'ecommerce-analytics-12345'
+  }
 });
 
 // Track different marketplaces with separate sessions
