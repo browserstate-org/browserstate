@@ -63,7 +63,7 @@ def test_redis_storage_validation():
         
         # Test that colons are not allowed in user_id
         try:
-            storage = RedisStorage(redis_url="redis://localhost:6379/0", key_prefix="browserstate")
+            storage = RedisStorage(host="localhost", port=6379, key_prefix="browserstate")
             storage.upload("test:user", "session1", "/tmp")
             assert False, "Should have raised ValueError for colon in user_id"
         except ValueError:
@@ -71,7 +71,7 @@ def test_redis_storage_validation():
         
         # Test that colons are not allowed in session_id
         try:
-            storage = RedisStorage(redis_url="redis://localhost:6379/0", key_prefix="browserstate")
+            storage = RedisStorage(host="localhost", port=6379, key_prefix="browserstate")
             storage.upload("testuser", "session:1", "/tmp")
             assert False, "Should have raised ValueError for colon in session_id"
         except ValueError:
@@ -79,7 +79,7 @@ def test_redis_storage_validation():
         
         # Test that colons are not allowed in key_prefix
         try:
-            RedisStorage(redis_url="redis://localhost:6379/0", key_prefix="browser:state")
+            RedisStorage(host="localhost", port=6379, key_prefix="browser:state")
             assert False, "Should have raised ValueError for colon in key_prefix"
         except ValueError:
             pass
