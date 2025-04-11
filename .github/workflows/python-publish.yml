@@ -137,7 +137,7 @@ jobs:
     - name: Publish to PyPI
       if: ${{ github.event.inputs.publish_to_pypi == 'true' }}
       env:
-        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+        TWINE_USERNAME: "__token__"
         TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
       run: |
         set -e  # Exit immediately if a command exits with a non-zero status
