@@ -1,6 +1,6 @@
 {
   "name": "browserstate",
-  "version": "0.4.5",
+  "version": "0.4.5-canary.20250411192344",
   "description": "Manage browser profiles across cloud storage providers",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
