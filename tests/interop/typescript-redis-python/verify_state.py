@@ -13,7 +13,8 @@ from playwright.async_api import async_playwright
 from browserstate import BrowserState, BrowserStateOptions
 
 # Redis configuration for Python
-REDIS_URL = "redis://localhost:6379/0"
+REDIS_HOST = "localhost"
+REDIS_PORT = 6379
 REDIS_KEY_PREFIX = "browserstate"
 
 # Test constants - must match TypeScript test
@@ -39,8 +40,11 @@ async def verify_typescript_state():
     # Initialize browser state with Redis storage
     options = BrowserStateOptions(
         user_id=USER_ID,
-        redis_url=REDIS_URL,
-        redis_key_prefix=REDIS_KEY_PREFIX
+        redis_options={
+            "host": REDIS_HOST,
+            "port": REDIS_PORT,
+            "key_prefix": REDIS_KEY_PREFIX
+        }
     )
     browser_state = BrowserState(options)
     
