@@ -1,116 +1,171 @@
-# 🚧 BrowserState for Python - COMING SOON 🚧
+# 🧠 BrowserState for Python
 
-The Python implementation of BrowserState is under active development and will be available soon. 
+> Auth & memory for AI agents and browser automation — now in Python.
 
-# Why BrowserState?
-Most browser automation workflows fail because authentication and session data don't persist reliably across environments. Manually handling cookies or re-authenticating slows everything down. Worse, many automations fail due to inconsistent browser fingerprints, machine IDs, and storage states—leading to bot detection and bans.
+[![PyPI version](https://badge.fury.io/py/browserstate.svg)](https://pypi.org/project/browserstate/)
 
-BrowserState ensures your automation behaves like a real, returning user by providing:
+BrowserState lets agents and automation tools act like real, returning users. It captures and restores full browser session state — enabling persistent identity, stable automation, and reliable behavior at scale.
 
-Full Browser Context Restoration – Save and restore cookies, local storage, IndexedDB, service worker caches, and extension data. Resume automation 
-from the exact previous state.
+---
 
-Multi-Instance Synchronization – Share browser profiles across multiple servers or devices, making automation scalable and resilient.
+## 🚀 Install
 
-Zero-Setup Onboarding for Automation – Instantly deploy automation-ready browser profiles without manual setup.
-
-Efficient Resource Usage – Persistent browser usage without memory leaks, eliminating the need to launch new instances for every run.
-
-Faster Debugging & Reproducibility – Store failing test cases exactly as they were, making it easy to diagnose automation failures.
-
-Offline Execution & Caching – Automate tasks that rely on cached assets, such as scraping content behind paywalls or working in low-connectivity environments.
-
-Cross-Device Synchronization – Seamlessly move between local development, cloud servers, and headless automation.
-
-✅ Bot Detection Bypass
-Many bot detection systems track inconsistencies in browser states—frequent changes to fingerprints, device identifiers, and storage behavior trigger red flags. Most people get detected because they unknowingly create a "new machine" every time.
-
-BrowserState solves this by preserving a stable, persistent browser identity across runs instead of resetting key markers. This drastically reduces detection risks while maintaining full automation control.
-
-Now you can move fast without breaking sessions—or getting flagged as a bot.
-
-## Features (Coming Soon)
-
-- Save browser profiles (cookies, local storage, etc.) to different storage providers
-- Restore browser profiles on different machines
-- Support for multiple storage providers:
-  - Local storage
-  - AWS S3
-  - Google Cloud Storage
-  - Redis
-- Works with popular browser automation tools:
-  - Selenium
-  - Playwright
-  - Puppeteer (via Pyppeteer)
-
-## Implementation Roadmap
-
-| Feature | Status |
-|---------|--------|
-| Local Storage | 🚧 In Development |
-| S3 Storage | 🚧 In Development |
-| Redis Storage | 🚧 In Development |
-| GCS Storage | 🚧 In Development |
-
-## Installation (Pre-Release)
-
-While BrowserState for Python is not yet available on PyPI, you can install it in several ways:
-
-### Using pip with GitHub repository
-```bash
-# Install directly from GitHub repository
-pip install git+https://github.com/browserstate-org/browserstate#subdirectory=python
-```
-
-### Using GitHub Packages (recommended)
-Once we publish to GitHub Packages, you'll be able to install it using:
-
-```bash
-# Install directly from GitHub Packages (for public packages)
-pip install browserstate --index-url https://pip.pkg.github.com/browserstate-org
-
-# Using uv
-uv pip install browserstate --index-url https://pip.pkg.github.com/browserstate-org
-```
-
-For permanent configuration, add this to your pip configuration:
-```bash
-pip config set global.extra-index-url https://pip.pkg.github.com/browserstate-org
-```
-
-### Using uv (faster alternative)
-```bash
-# First install uv if you don't have it
-pip install uv
-# Or with pipx for isolated installation
-pipx install uv
-
-# Then install browserstate from GitHub
-uv pip install git+https://github.com/browserstate-org/browserstate#subdirectory=python
-```
-
-### From source
-```bash
-# Clone the repository
-git clone https://github.com/browserstate-org/browserstate
-cd browserstate/python
-
-# Install with pip
-pip install .
-
-# Or with uv
-uv pip install .
-```
-
-Once the package is officially released on PyPI, you'll be able to install it with:
 ```bash
 pip install browserstate
-# or
+```
+
+Or with [uv](https://github.com/astral-sh/uv):
+
+```bash
 uv pip install browserstate
 ```
 
-## Want to be notified when Python support is released?
+---
 
-Watch our GitHub repository for updates or join our mailing list on [browserstate.io](https://browserstate.io).
+## 🧭 Why BrowserState?
 
-In the meantime, check out our [TypeScript implementation](../typescript/README.md) which is stable and production-ready. 
+Most browser automations fail because sessions reset every run. Fingerprints drift, cookies vanish, and re-auth prompts kill workflows.
+
+**BrowserState makes browser identity portable.**  
+It captures and restores the full browser context: cookies, storage, fingerprints, service workers, and more — across environments and tools.
+
+---
+
+## ✨ Key Features
+
+- ✅ Full browser context save & restore
+- 🔁 Portable across machines, clouds, CI pipelines
+- 🧠 Works with Playwright, Selenium, Pyppeteer, AI agents
+- 🛡️ Bot detection resistant (no more fingerprint drift)
+- ☁️ Pluggable storage (Local, Redis, S3, GCS)
+- 🐛 Capture failed sessions for debugging + rehydration
+
+---
+
+## 🛠️ Quickstart
+
+### 1. Configure BrowserState
+
+```python
+from browserstate import BrowserState, BrowserStateOptions
+
+options = BrowserStateOptions(
+    user_id="user-123",
+    local_storage_path="./sessions"
+)
+
+state = BrowserState(options)
+```
+
+---
+
+## 🔐 Example: Automating Login + Capturing State (LinkedIn)
+
+BrowserState doesn't include login automation, but you can pair it with your own Playwright/Selenium scripts.
+
+Here’s a simple Playwright example using hardcoded credentials:
+
+```python
+from browserstate import BrowserState, BrowserStateOptions
+from playwright.async_api import async_playwright
+
+state = BrowserState(BrowserStateOptions(
+    user_id="linkedin-user",
+    local_storage_path="./sessions"
+))
+
+async def login_and_capture():
+    session_id = "linkedin-session"
+    session_path = await state.mount(session_id)
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch_persistent_context(
+            user_data_dir=session_path,
+            headless=False
+        )
+        page = await browser.new_page()
+        await page.goto("https://www.linkedin.com/login")
+
+        await page.fill("#username", "you@example.com")
+        await page.fill("#password", "yourpassword")
+        await page.click("button[type='submit']")
+
+        await page.wait_for_url("https://www.linkedin.com/feed", timeout=10000)
+        await browser.close()
+
+    await state.unmount()
+
+# asyncio.run(login_and_capture())
+```
+
+You can then **reuse that session** later without logging in again:
+
+```python
+session_path = await state.mount("linkedin-session")
+
+async with async_playwright() as p:
+    browser = await p.chromium.launch_persistent_context(
+        user_data_dir=session_path,
+        headless=True,
+    )
+    page = await browser.new_page()
+    await page.goto("https://www.linkedin.com/feed")
+    # Should already be logged in
+```
+
+---
+
+## 🔄 Other Storage Providers
+
+```python
+# S3
+BrowserStateOptions(
+    user_id="agent123",
+    s3_options={
+        "bucket": "my-browserstate-bucket",
+        "aws_access_key_id": "...",
+        "aws_secret_access_key": "...",
+        "region_name": "us-west-2"
+    }
+)
+
+# Redis
+BrowserStateOptions(
+    user_id="agent123",
+    redis_options={
+        "host": "localhost",
+        "port": 6379,
+        "key_prefix": "browserstate"
+    }
+)
+```
+
+---
+
+## 📚 Full API
+
+```python
+await state.mount(session_id: str) -> str        # Restores session
+await state.unmount() -> None                    # Uploads & cleans up session
+await state.list_sessions() -> List[str]         # Lists all sessions
+await state.delete_session(session_id: str)      # Deletes from storage
+state.get_current_session() -> Optional[str]     # ID of mounted session
+state.get_current_session_path() -> Optional[str]# Path to local session
+```
+
+---
+
+## 🧪 Debugging & Reliability
+
+BrowserState enables session capture after failed runs so you can:
+- Reproduce bugs locally
+- Test flows against known state
+- Cache login sessions across tests or agents
+
+---
+
+## 📫 Stay Updated
+
+- 🧠 [Docs](https://browserstate.io)
+- 💬 [GitHub](https://github.com/browserstate-org/browserstate)
+- 📨 Join our waitlist or Slack for early access & support
