@@ -1,4 +1,4 @@
-name: Python Package Version Bump and Build
+name: Python Package Version Bump, Build and Publish to PyPI
 
 on:
   workflow_dispatch:
@@ -16,6 +16,11 @@ on:
         description: 'Override version (leave empty to auto-increment)'
         required: false
         type: string
+      publish_to_pypi:
+        description: 'Publish to PyPI'
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   deploy:
@@ -37,7 +42,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install build hatch semver wheel
+        pip install build hatch semver wheel twine
     
     - name: Set Git identity
       run: |
@@ -129,10 +134,28 @@ jobs:
           echo "Tag python-v${{ steps.version.outputs.new_version }} already exists, skipping tag creation"
         fi
     
+    - name: Publish to PyPI
+      if: ${{ github.event.inputs.publish_to_pypi == 'true' }}
+      env:
+        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+      run: |
+        cd python
+        python -m twine upload dist/*
+        echo "🚀 Package published to PyPI successfully!"
+    
     - name: Update installation instructions
       run: |
         echo "::notice::Python package version ${{ steps.version.outputs.new_version }} built successfully!"
         echo "::notice::Pull request created to update version in main branch"
-        echo "::notice::Installation Instructions:"
-        echo "::notice::pip install git+https://github.com/browserstate-org/browserstate@python-v${{ steps.version.outputs.new_version }}#subdirectory=python"
-        echo "::notice::uv pip install git+https://github.com/browserstate-org/browserstate@python-v${{ steps.version.outputs.new_version }}#subdirectory=python" 
+        
+        if [ "${{ github.event.inputs.publish_to_pypi }}" == "true" ]; then
+          echo "::notice::📦 Package published to PyPI!"
+          echo "::notice::Installation Instructions:"
+          echo "::notice::pip install browserstate==${{ steps.version.outputs.new_version }}"
+          echo "::notice::uv pip install browserstate==${{ steps.version.outputs.new_version }}"
+        else
+          echo "::notice::Installation Instructions from GitHub:"
+          echo "::notice::pip install git+https://github.com/browserstate-org/browserstate@python-v${{ steps.version.outputs.new_version }}#subdirectory=python"
+          echo "::notice::uv pip install git+https://github.com/browserstate-org/browserstate@python-v${{ steps.version.outputs.new_version }}#subdirectory=python"
+        fi 
