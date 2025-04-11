@@ -14,11 +14,7 @@ async def ask(question: str) -> str:
 async def main():
     options = BrowserStateOptions(
         user_id="demo_user",
-        redis_options={
-            "host": "127.0.0.1",
-            "port": 6379,
-            "key_prefix": "browserstate"
-        }
+        redis_options={"host": "127.0.0.1", "port": 6379, "key_prefix": "browserstate"},
     )
     browser_state = BrowserState(options)
 
@@ -29,21 +25,21 @@ async def main():
 
     async with async_playwright() as p:
         browser = await p.chromium.launch_persistent_context(
-            user_data_dir,
-            headless=False,
-            args=["--profile-directory=Default"]
+            user_data_dir, headless=False, args=["--profile-directory=Default"]
         )
         page = await browser.new_page()
-        
+
         print("Navigating to LinkedIn feed...")
         await page.goto("https://www.linkedin.com/feed/")
-        
+
         try:
             print("Verifying session by attempting to create a post...")
-            await page.wait_for_selector('button:has-text("Start a post")', timeout=10000)
+            await page.wait_for_selector(
+                'button:has-text("Start a post")', timeout=10000
+            )
             await page.click('button:has-text("Start a post")')
             await page.wait_for_timeout(1500)
-            await page.fill('[role="textbox"]', 'Posted via BrowserState Python Demo')
+            await page.fill('[role="textbox"]', "Posted via BrowserState Python Demo")
             print("\n✅ Session reopened successfully!")
         except Exception as e:
             print(f"\n❌ Error verifying session: {e}")

@@ -29,6 +29,7 @@ class BrowserStateOptions:
             local_storage_path: Path for LocalStorage, if used
             s3_options: Options for S3Storage, if used
             gcs_options: Options for GCSStorage, if used
+            redis_options: Options for RedisStorage, if used
         """
         self.user_id = user_id
         self.storage_provider = storage_provider
@@ -61,7 +62,13 @@ class BrowserState:
             # S3 storage - import lazily
             from .storage import S3Storage
 
-            self.storage = S3Storage(**options.s3_options)
+            self.storage = S3Storage(
+                bucket_name=options.s3_options.get("bucket_name"),
+                access_key_id=options.s3_options.get("access_key_id"),
+                secret_access_key=options.s3_options.get("secret_access_key"),
+                region=options.s3_options.get("region"),
+                endpoint=options.s3_options.get("endpoint"),
+            )
         elif options.gcs_options:
             # Google Cloud Storage - import lazily
             from .storage import GCSStorage
@@ -71,12 +78,18 @@ class BrowserState:
             # Redis storage - import lazily
             from .storage import RedisStorage
 
-            self.storage = RedisStorage(**options.redis_options)
+            self.storage = RedisStorage(
+                host=options.redis_options.get("host", "localhost"),
+                port=options.redis_options.get("port", 6379),
+                key_prefix=options.redis_options.get("key_prefix", "browserstate"),
+                password=options.redis_options.get("password"),
+                db=options.redis_options.get("db", 0),
+            )
         else:
             # Local storage (default)
             self.storage = LocalStorage(options.local_storage_path)
 
-    async def mount(self, session_id: str) -> str:
+    async def mount(self, session_id: str) -> Dict[str, str]:
         """
         Mounts a browser session
 
@@ -84,21 +97,21 @@ class BrowserState:
             session_id: Session ID to mount
 
         Returns:
-            Path to the mounted session
+            Dictionary containing the path to the mounted session
         """
         # Clean up any existing session
-        self._cleanup_session()
+        await self._cleanup_session()
 
         try:
             # Download the session
             local_path = await self.storage.download(self.user_id, session_id)
 
-            # Store active session details
+            # Update active session
             self.active_session = {"id": session_id, "path": local_path}
 
-            return local_path
+            return self.active_session
         except Exception as e:
-            logging.error(f"Error mounting session {session_id}: {e}")
+            logging.error(f"Error mounting session {session_id}: {str(e)}")
             raise
 
     async def unmount(self) -> None:
@@ -116,12 +129,12 @@ class BrowserState:
             )
 
             # Clean up
-            self._cleanup_session()
+            await self._cleanup_session()
 
         except Exception as e:
             logging.error(f"Error unmounting session {self.active_session['id']}: {e}")
             # Always clean up the local session
-            self._cleanup_session()
+            await self._cleanup_session()
             raise
 
     async def list_sessions(self) -> List[str]:
@@ -173,7 +186,7 @@ class BrowserState:
         """
         return self.active_session["path"] if self.active_session else None
 
-    def _cleanup_session(self) -> None:
+    async def _cleanup_session(self) -> None:
         """
         Clean up the current session's local files
         """
