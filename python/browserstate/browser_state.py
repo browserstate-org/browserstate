@@ -62,13 +62,7 @@ class BrowserState:
             # S3 storage - import lazily
             from .storage import S3Storage
 
-            self.storage = S3Storage(
-                bucket_name=options.s3_options.get("bucket_name"),
-                access_key_id=options.s3_options.get("access_key_id"),
-                secret_access_key=options.s3_options.get("secret_access_key"),
-                region=options.s3_options.get("region"),
-                endpoint=options.s3_options.get("endpoint"),
-            )
+            self.storage = S3Storage(**options.s3_options)
         elif options.gcs_options:
             # Google Cloud Storage - import lazily
             from .storage import GCSStorage
