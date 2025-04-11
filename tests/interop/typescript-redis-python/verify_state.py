@@ -10,10 +10,11 @@ import asyncio
 import sys
 from pathlib import Path
 from playwright.async_api import async_playwright
-from browserstate import BrowserState, BrowserStateOptions, RedisStorage
+from browserstate import BrowserState, BrowserStateOptions
 
 # Redis configuration for Python
-REDIS_URL = "redis://localhost:6379/0"
+REDIS_HOST = "localhost"
+REDIS_PORT = 6379
 REDIS_KEY_PREFIX = "browserstate"
 
 # Test constants - must match TypeScript test
@@ -36,34 +37,32 @@ async def verify_typescript_state():
     """Verify the browser state created by TypeScript."""
     print("\n🔍 Verifying TypeScript-created browser state")
     
-    # Create a Redis storage provider with the correct URL format
-    redis_options = {
-        "redis_url": REDIS_URL,
-        "key_prefix": REDIS_KEY_PREFIX
-    }
-    
     # Initialize browser state with Redis storage
     options = BrowserStateOptions(
         user_id=USER_ID,
-        redis_options=redis_options
+        redis_options={
+            "host": REDIS_HOST,
+            "port": REDIS_PORT,
+            "key_prefix": REDIS_KEY_PREFIX
+        }
     )
     browser_state = BrowserState(options)
     
     # List available sessions
-    sessions = browser_state.list_sessions()
+    sessions = await browser_state.list_sessions()
     print(f"📋 Available sessions: {sessions}")
     
     if SESSION_ID not in sessions:
         fail_test(f"Session '{SESSION_ID}' not found")
     
     # Mount the session
-    state = browser_state.mount_session(SESSION_ID)
-    print(f"📂 Mounted session at: {state['path']}")
+    session_path = await browser_state.mount(SESSION_ID)
+    print(f"📂 Mounted session at: {session_path}")
     
     async with async_playwright() as p:
         # Launch browser with the mounted state
         browser = await p.chromium.launch_persistent_context(
-            user_data_dir=state["path"],
+            user_data_dir=session_path,
             headless=not DEBUG
         )
         
@@ -112,7 +111,7 @@ async def verify_typescript_state():
             await browser.close()
     
     # Unmount the session
-    browser_state.unmount_session()
+    await browser_state.unmount()
     print("✅ Verification complete")
 
 if __name__ == "__main__":
