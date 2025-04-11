@@ -18,8 +18,7 @@ REDIS_CONFIG = {
     "port": 6379,
     "password": None,
     "db": 0,
-    "key_prefix": "browserstate:",
-    "ttl": 604800  # 7 days
+    "key_prefix": "browserstate"
 }
 
 def create_test_data(base_dir: str) -> None:

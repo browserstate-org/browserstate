@@ -29,6 +29,7 @@ dev = [
     "pytest-cov>=4.0.0",
     "flake8>=6.0.0",
     "moto>=5.0.0",  # AWS mocking for tests
+    "ruff>=0.3.0",  # Formatting and linting
 ]
 
 # Optional storage backend dependencies
@@ -64,3 +65,16 @@ include = [
     "README.md",
     "browserstate/**/*.py",
 ]
+
+[tool.ruff]
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]  # Enable pycodestyle ('E'), pyflakes ('F'), and isort ('I') rules
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
