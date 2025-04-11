@@ -140,8 +140,26 @@ jobs:
         TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
         TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
       run: |
+        set -e  # Exit immediately if a command exits with a non-zero status
         cd python
-        python -m twine upload dist/*
+        
+        # Verify distribution files exist
+        if [ ! "$(ls -A dist)" ]; then
+          echo "❌ Error: No distribution files found in dist/ directory"
+          exit 1
+        fi
+        
+        # Validate the package before uploading
+        echo "🔍 Validating the package before uploading..."
+        twine check dist/*
+        
+        # Upload to PyPI with proper error handling
+        echo "📦 Uploading to PyPI..."
+        if ! python -m twine upload dist/*; then
+          echo "❌ Failed to upload package to PyPI"
+          exit 1
+        fi
+        
         echo "🚀 Package published to PyPI successfully!"
     
     - name: Update installation instructions
