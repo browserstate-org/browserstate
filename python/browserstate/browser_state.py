@@ -2,6 +2,7 @@ import os
 import shutil
 import uuid
 import logging
+import asyncio
 from typing import Dict, List, Optional, Union
 
 from .storage import StorageProvider, LocalStorage
@@ -90,7 +91,7 @@ class BrowserState:
 
         try:
             # Download the session
-            local_path = self.storage.download(self.user_id, session_id)
+            local_path = await self.storage.download(self.user_id, session_id)
 
             # Store active session details
             self.active_session = {"id": session_id, "path": local_path}
@@ -110,7 +111,7 @@ class BrowserState:
 
         try:
             # Upload session data
-            self.storage.upload(
+            await self.storage.upload(
                 self.user_id, self.active_session["id"], self.active_session["path"]
             )
 
@@ -131,7 +132,7 @@ class BrowserState:
             List of session IDs
         """
         try:
-            return self.storage.list_sessions(self.user_id)
+            return await self.storage.list_sessions(self.user_id)
         except Exception as e:
             logging.error(f"Error listing sessions: {e}")
             return []
@@ -149,7 +150,7 @@ class BrowserState:
                 await self.unmount()
 
             # Delete from storage
-            self.storage.delete_session(self.user_id, session_id)
+            await self.storage.delete_session(self.user_id, session_id)
         except Exception as e:
             logging.error(f"Error deleting session {session_id}: {e}")
             raise

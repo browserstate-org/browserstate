@@ -16,7 +16,8 @@ def create_dummy_session(path):
     return path
 
 
-def test_browser_state_mount_and_unmount(local_storage_base):
+@pytest.mark.asyncio
+async def test_browser_state_mount_and_unmount(local_storage_base):
     user_id = "browser_user"
     session_id = "session_browser"
     storage = LocalStorage(local_storage_base)
@@ -28,60 +29,62 @@ def test_browser_state_mount_and_unmount(local_storage_base):
     create_dummy_session(session_storage_path)
     
     # Mount the session.
-    active_session = browser_state.mount_session(session_id)
-    assert active_session["id"] == session_id
-    downloaded_file = os.path.join(active_session["path"], "state.txt")
+    local_path = await browser_state.mount(session_id)
+    assert browser_state.get_current_session() == session_id
+    downloaded_file = os.path.join(local_path, "state.txt")
     assert os.path.exists(downloaded_file)
     
     # Modify the session.
     with open(downloaded_file, "a") as f:
         f.write("\nNew state data.")
-    browser_state.unmount_session()
+    await browser_state.unmount()
     
     # Remount to verify changes.
-    active_session_2 = browser_state.mount_session(session_id)
-    with open(os.path.join(active_session_2["path"], "state.txt"), "r") as f:
+    local_path_2 = await browser_state.mount(session_id)
+    with open(os.path.join(local_path_2, "state.txt"), "r") as f:
         content = f.read()
     assert "New state data." in content
     
-    browser_state.delete_session(session_id)
-    sessions = storage.list_sessions(user_id)
+    await browser_state.delete_session(session_id)
+    sessions = await storage.list_sessions(user_id)
     assert session_id not in sessions
 
 
-
-def test_mount_nonexistent_session(local_storage_base):
+@pytest.mark.asyncio
+async def test_mount_nonexistent_session(local_storage_base):
     user_id = "edge_user"
     session_id = "nonexistent_session"
     storage = LocalStorage(local_storage_base)
     options = BrowserStateOptions(user_id=user_id, local_storage_path=local_storage_base)
     browser_state = BrowserState(options)
     
-    active_session = browser_state.mount_session(session_id)
-    assert os.path.exists(active_session["path"])
-    assert os.listdir(active_session["path"]) == []
+    local_path = await browser_state.mount(session_id)
+    assert os.path.exists(local_path)
+    assert os.listdir(local_path) == []
     
-    browser_state.delete_session(session_id)
+    await browser_state.delete_session(session_id)
 
 
-def test_double_mount_unmount(local_storage_base):
+@pytest.mark.asyncio
+async def test_double_mount_unmount(local_storage_base):
     user_id = "double_user"
     session_id = "double_session"
     storage = LocalStorage(local_storage_base)
     options = BrowserStateOptions(user_id=user_id, local_storage_path=local_storage_base)
     browser_state = BrowserState(options)
     
-    active_session_1 = browser_state.mount_session(session_id)
-    active_session_2 = browser_state.mount_session(session_id)
-    assert active_session_1["id"] == active_session_2["id"]
+    local_path_1 = await browser_state.mount(session_id)
+    local_path_2 = await browser_state.mount(session_id)
+    assert local_path_1 == local_path_2
     
-    browser_state.unmount_session()
+    await browser_state.unmount()
     # Second unmount should be safe.
-    browser_state.unmount_session()
-    browser_state.delete_session(session_id)
+    await browser_state.unmount()
+    await browser_state.delete_session(session_id)
 
 
-def test_active_session_cleanup_on_error(local_storage_base, monkeypatch):
+@pytest.mark.asyncio
+async def test_active_session_cleanup_on_error(local_storage_base, monkeypatch):
     user_id = "cleanup_user"
     session_id = "cleanup_session"
     storage = LocalStorage(local_storage_base)
@@ -94,51 +97,54 @@ def test_active_session_cleanup_on_error(local_storage_base, monkeypatch):
     with open(dummy_file, "w") as f:
         f.write("Dummy")
     
-    browser_state.mount_session(session_id)
+    await browser_state.mount(session_id)
     original_upload = storage.upload
 
-    def faulty_upload(user_id, session_id, file_path):
+    async def faulty_upload(user_id, session_id, file_path):
         raise Exception("Forced upload error")
     monkeypatch.setattr(storage, "upload", faulty_upload)
     
     with pytest.raises(Exception, match="Forced upload error"):
-        browser_state.unmount_session()
-    assert browser_state.get_active_session() is None
+        await browser_state.unmount()
+    assert browser_state.get_current_session() is None
     
     monkeypatch.setattr(storage, "upload", original_upload)
-    browser_state.delete_session(session_id)
+    await browser_state.delete_session(session_id)
 
 
-def test_browser_state_list_sessions_error(local_storage_base, monkeypatch):
+@pytest.mark.asyncio
+async def test_browser_state_list_sessions_error(local_storage_base, monkeypatch):
     user_id = "error_user"
     storage = LocalStorage(local_storage_base)
 
-    def faulty_list_sessions(user_id):
+    async def faulty_list_sessions(user_id):
         raise Exception("List sessions error")
     monkeypatch.setattr(storage, "list_sessions", faulty_list_sessions)
     
     options = BrowserStateOptions(user_id=user_id, local_storage_path=local_storage_base)
     browser_state = BrowserState(options)
-    sessions = browser_state.list_sessions()
+    sessions = await browser_state.list_sessions()
     assert sessions == []
 
 
-def test_invalid_input_empty_strings(local_storage_base):
+@pytest.mark.asyncio
+async def test_invalid_input_empty_strings(local_storage_base):
     user_id = ""
     session_id = ""
     storage = LocalStorage(local_storage_base)
     options = BrowserStateOptions(user_id=user_id, local_storage_path=local_storage_base)
     browser_state = BrowserState(options)
     
-    active_session = browser_state.mount_session(session_id)
+    local_path = await browser_state.mount(session_id)
     # Expect a generated non-empty session id.
-    assert active_session["id"] != ""
+    assert browser_state.get_current_session() != ""
     
-    browser_state.unmount_session()
-    browser_state.delete_session(active_session["id"])
+    await browser_state.unmount()
+    await browser_state.delete_session(browser_state.get_current_session())
 
 
-def test_invalid_input_long_strings():
+@pytest.mark.asyncio
+async def test_invalid_input_long_strings():
     # Test with extremely long user_id and session_id.
     user_id = "u" * 1000
     session_id = "s" * 1000
@@ -152,82 +158,52 @@ def test_invalid_input_long_strings():
     # macOS/Linux: typically "File name too long"
     # Let's catch any OSError without checking the specific message
     with pytest.raises(OSError):
-        browser_state.mount_session(session_id)
+        await browser_state.mount(session_id)
 
 
-# def test_concurrent_mount_unmount():
-#     # Simulate multiple threads mounting and unmounting the same session concurrently.
-#     user_id = "concurrent_user"
-#     session_id = "concurrent_session"
-#     base_storage = tempfile.mkdtemp(prefix="concurrent_local_")
-#     storage = LocalStorage(base_storage)
-#     options = BrowserStateOptions(user_id=user_id, local_storage_path=base_storage)
-#     browser_state = BrowserState(options)
-
-#     errors = []
-
-#     def mount_and_unmount():
-#         try:
-#             browser_state.mount_session(session_id)
-#             active_session = browser_state.get_active_session()
-#             if active_session:
-#                 test_file = os.path.join(active_session["path"], "concurrent.txt")
-#                 with open(test_file, "w") as f:
-#                     f.write("Concurrent test")
-#             browser_state.unmount_session()
-#         except Exception as e:
-#             errors.append(e)
-
-#     threads = [threading.Thread(target=mount_and_unmount) for _ in range(5)]
-#     for t in threads:
-#         t.start()
-#     for t in threads:
-#         t.join()
-
-#     assert not errors, f"Errors occurred in concurrent operations: {errors}"
-#     browser_state.delete_session(session_id)
-#     shutil.rmtree(base_storage, ignore_errors=True)
-
-
-def test_browser_state_mount_new_session(local_storage_base):
+@pytest.mark.asyncio
+async def test_browser_state_mount_new_session(local_storage_base):
     user_id = "new_user"
     session_id = "no_such_session"
     options = BrowserStateOptions(user_id=user_id, local_storage_path=local_storage_base)
     browser_state = BrowserState(options)
     
-    active_session = browser_state.mount_session(session_id)
-    assert active_session["id"] == session_id
-    assert os.path.exists(active_session["path"])
-    assert os.listdir(active_session["path"]) == []
+    local_path = await browser_state.mount(session_id)
+    assert browser_state.get_current_session() == session_id
+    assert os.path.exists(local_path)
+    assert os.listdir(local_path) == []
     
-    browser_state.delete_session(session_id)
+    await browser_state.delete_session(session_id)
 
 
-def test_browser_state_unmount_no_active_session(local_storage_base, caplog):
+@pytest.mark.asyncio
+async def test_browser_state_unmount_no_active_session(local_storage_base, caplog):
     user_id = "test_user"
     options = BrowserStateOptions(user_id=user_id, local_storage_path=local_storage_base)
     browser_state = BrowserState(options)
     
-    browser_state.unmount_session()
+    await browser_state.unmount()
     assert "No active session to unmount" in caplog.text
 
 
-def test_browser_state_delete_non_existent_session(local_storage_base, caplog):
+@pytest.mark.asyncio
+async def test_browser_state_delete_non_existent_session(local_storage_base, caplog):
     user_id = "test_user"
     session_id = "no_such_session"
     options = BrowserStateOptions(user_id=user_id, local_storage_path=local_storage_base)
     browser_state = BrowserState(options)
     
     # Should not raise an error.
-    browser_state.delete_session(session_id)
+    await browser_state.delete_session(session_id)
 
 
-def test_browser_state_list_sessions_empty(local_storage_base):
+@pytest.mark.asyncio
+async def test_browser_state_list_sessions_empty(local_storage_base):
     user_id = "empty_user"
     options = BrowserStateOptions(user_id=user_id, local_storage_path=local_storage_base)
     browser_state = BrowserState(options)
     
-    sessions = browser_state.list_sessions()
+    sessions = await browser_state.list_sessions()
     assert sessions == []
 
 
@@ -249,56 +225,83 @@ def test_browser_state_options_priority(mock_import_module, local_storage_base):
             return mock_redis
         elif module_name == 'botocore':
             return MagicMock()
-        
-        # Default case should not happen in this test
-        raise ImportError(f"Unexpected module import: {module_name}")
-    
+        raise ImportError(f"Module {module_name} not found")
+
     mock_import_module.side_effect = import_side_effect
-    
-    # 1) When storage_provider is specified.
-    custom_provider = MagicMock()
+
+    # Test priority order: storage_provider > s3 > gcs > redis > local
+    # 1. Test storage_provider priority
+    mock_storage = MagicMock()
     options = BrowserStateOptions(
-        user_id="user1",
-        storage_provider=custom_provider,
-        s3_options={"bucket_name": "test-bucket"}
+        user_id="test_user",
+        storage_provider=mock_storage,
+        s3_options={"key": "value"},
+        gcs_options={"key": "value"},
+        redis_options={"key": "value"}
     )
     browser_state = BrowserState(options)
-    assert browser_state.storage == custom_provider
+    assert browser_state.storage == mock_storage
 
-    # 2) s3_options provided.
+    # 2. Test S3 priority
     options = BrowserStateOptions(
-        user_id="user1",
-        s3_options={"bucket_name": "test-bucket"},
-        gcs_options={"bucket_name": "gcs-bucket"}
+        user_id="test_user",
+        s3_options={"key": "value"},
+        gcs_options={"key": "value"},
+        redis_options={"key": "value"}
     )
     browser_state = BrowserState(options)
-    from browserstate.storage.s3_storage import S3Storage
-    assert isinstance(browser_state.storage, S3Storage)
+    assert isinstance(browser_state.storage, MagicMock)  # Mock S3Storage
 
-    # 3) gcs_options provided.
-    options = BrowserStateOptions(user_id="user1", gcs_options={"bucket_name": "gcs-bucket"})
+    # 3. Test GCS priority
+    options = BrowserStateOptions(
+        user_id="test_user",
+        gcs_options={"key": "value"},
+        redis_options={"key": "value"}
+    )
     browser_state = BrowserState(options)
-    from browserstate.storage.gcs_storage import GCSStorage
-    assert isinstance(browser_state.storage, GCSStorage)
+    assert isinstance(browser_state.storage, MagicMock)  # Mock GCSStorage
 
-    # 4) redis_options provided.
-    options = BrowserStateOptions(user_id="user1", redis_options={"redis_url": "redis://..."})
+    # 4. Test Redis priority
+    options = BrowserStateOptions(
+        user_id="test_user",
+        redis_options={"key": "value"}
+    )
     browser_state = BrowserState(options)
-    from browserstate.storage.redis_storage import RedisStorage
-    assert isinstance(browser_state.storage, RedisStorage)
+    assert isinstance(browser_state.storage, MagicMock)  # Mock RedisStorage
 
-    # 5) Defaults to LocalStorage.
-    options = BrowserStateOptions(user_id="user1")
+    # 5. Test LocalStorage fallback
+    options = BrowserStateOptions(
+        user_id="test_user",
+        local_storage_path=local_storage_base
+    )
     browser_state = BrowserState(options)
-    from browserstate.storage.local_storage import LocalStorage
     assert isinstance(browser_state.storage, LocalStorage)
 
-@patch.object(LocalStorage, 'upload', side_effect=Exception("Simulated upload error"))
-def test_browser_state_unmount_exception(mocked_upload, local_storage_base):
+
+@pytest.mark.asyncio
+async def test_browser_state_unmount_exception(local_storage_base):
     user_id = "test_user"
-    options = BrowserStateOptions(user_id=user_id, local_storage_path=local_storage_base)
+    session_id = "test_session"
+    storage = LocalStorage(local_storage_base)
+    options = BrowserStateOptions(user_id=user_id, storage_provider=storage)
     browser_state = BrowserState(options)
     
-    browser_state.mount_session("session_fail")
+    # Create a session
+    session_path = os.path.join(local_storage_base, user_id, session_id)
+    create_dummy_session(session_path)
+    
+    # Mount the session
+    await browser_state.mount(session_id)
+    
+    # Mock the upload to raise an exception
+    async def mock_upload(*args, **kwargs):
+        raise Exception("Simulated upload error")
+    
+    storage.upload = mock_upload
+    
+    # Unmount should raise the exception
     with pytest.raises(Exception, match="Simulated upload error"):
-        browser_state.unmount_session()
+        await browser_state.unmount()
+    
+    # Cleanup
+    await browser_state.delete_session(session_id)

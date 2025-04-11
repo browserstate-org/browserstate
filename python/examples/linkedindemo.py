@@ -54,22 +54,24 @@ async def main():
 
         print("\nPress Ctrl+C when you want to end the session...")
 
+        # Create an event to signal when to end
+        end_event = asyncio.Event()
+
         def handle_sigint(signum, frame):
             print("\nEnding session...")
-            asyncio.create_task(end_session(browser, browser_state))
-            sys.exit(0)
+            end_event.set()
 
         signal.signal(signal.SIGINT, handle_sigint)
 
-        while True:
-            await asyncio.sleep(1)
-
-
-async def end_session(browser, browser_state):
-    await browser.close()
-    await browser_state.unmount()
-    print("✅ Session ended successfully!")
+        # Wait for end signal
+        await end_event.wait()
+        await browser.close()
+        await browser_state.unmount()
+        print("✅ Session ended successfully!")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass

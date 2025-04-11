@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 from typing import List, Optional
 import tempfile
+import asyncio
 
 from .storage_provider import StorageProvider
 
@@ -65,7 +66,7 @@ class LocalStorage(StorageProvider):
         os.makedirs(temp_dir, exist_ok=True)
         return os.path.join(temp_dir, session_id)
     
-    def download(self, user_id: str, session_id: str) -> str:
+    async def download(self, user_id: str, session_id: str) -> str:
         """
         Downloads a browser session to local temp directory.
         
@@ -88,15 +89,21 @@ class LocalStorage(StorageProvider):
             # Create target directory
             os.makedirs(target_path, exist_ok=True)
             
-            # Copy session data to temp directory
-            shutil.copytree(session_path, target_path, dirs_exist_ok=True)
+            # Run copy in executor to avoid blocking
+            await asyncio.get_event_loop().run_in_executor(
+                None,
+                shutil.copytree,
+                session_path,
+                target_path,
+                True  # dirs_exist_ok
+            )
         else:
             # Create an empty directory for new sessions
             os.makedirs(target_path, exist_ok=True)
         
         return target_path
     
-    def upload(self, user_id: str, session_id: str, file_path: str) -> None:
+    async def upload(self, user_id: str, session_id: str, file_path: str) -> None:
         """
         Uploads browser session files from temp to storage.
         
@@ -110,10 +117,16 @@ class LocalStorage(StorageProvider):
         # Ensure session directory exists
         os.makedirs(session_path, exist_ok=True)
         
-        # Copy files to storage
-        shutil.copytree(file_path, session_path, dirs_exist_ok=True)
+        # Run copy in executor to avoid blocking
+        await asyncio.get_event_loop().run_in_executor(
+            None,
+            shutil.copytree,
+            file_path,
+            session_path,
+            True  # dirs_exist_ok
+        )
     
-    def list_sessions(self, user_id: str) -> List[str]:
+    async def list_sessions(self, user_id: str) -> List[str]:
         """
         Lists all available sessions for a user.
         
@@ -126,13 +139,18 @@ class LocalStorage(StorageProvider):
         user_path = self._get_user_path(user_id)
         
         try:
-            # Get all directories in the user path
-            return [entry.name for entry in os.scandir(user_path) if entry.is_dir()]
+            # Run scandir in executor to avoid blocking
+            entries = await asyncio.get_event_loop().run_in_executor(
+                None,
+                os.scandir,
+                user_path
+            )
+            return [entry.name for entry in entries if entry.is_dir()]
         except OSError:
             # Directory does not exist, return empty array
             return []
     
-    def delete_session(self, user_id: str, session_id: str) -> None:
+    async def delete_session(self, user_id: str, session_id: str) -> None:
         """
         Deletes a session.
         
@@ -143,4 +161,9 @@ class LocalStorage(StorageProvider):
         session_path = self._get_session_path(user_id, session_id)
         
         if os.path.exists(session_path):
-            shutil.rmtree(session_path) 
+            # Run rmtree in executor to avoid blocking
+            await asyncio.get_event_loop().run_in_executor(
+                None,
+                shutil.rmtree,
+                session_path
+            ) 

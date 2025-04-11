@@ -7,7 +7,7 @@ class StorageProvider(ABC):
     """
     
     @abstractmethod
-    def download(self, user_id: str, session_id: str) -> str:
+    async def download(self, user_id: str, session_id: str) -> str:
         """
         Downloads a browser session to a local directory.
         
@@ -21,7 +21,7 @@ class StorageProvider(ABC):
         pass
     
     @abstractmethod
-    def upload(self, user_id: str, session_id: str, file_path: str) -> None:
+    async def upload(self, user_id: str, session_id: str, file_path: str) -> None:
         """
         Uploads a browser session to storage.
         
@@ -33,7 +33,7 @@ class StorageProvider(ABC):
         pass
     
     @abstractmethod
-    def list_sessions(self, user_id: str) -> List[str]:
+    async def list_sessions(self, user_id: str) -> List[str]:
         """
         Lists all available sessions for a user.
         
@@ -46,7 +46,7 @@ class StorageProvider(ABC):
         pass
     
     @abstractmethod
-    def delete_session(self, user_id: str, session_id: str) -> None:
+    async def delete_session(self, user_id: str, session_id: str) -> None:
         """
         Deletes a browser session.
         
