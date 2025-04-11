@@ -89,7 +89,7 @@ class BrowserState:
             # Local storage (default)
             self.storage = LocalStorage(options.local_storage_path)
 
-    async def mount(self, session_id: str) -> Dict[str, str]:
+    async def mount(self, session_id: str) -> str:
         """
         Mounts a browser session
 
@@ -97,7 +97,7 @@ class BrowserState:
             session_id: Session ID to mount
 
         Returns:
-            Dictionary containing the path to the mounted session
+            Path to the mounted session
         """
         # Clean up any existing session
         await self._cleanup_session()
@@ -109,7 +109,7 @@ class BrowserState:
             # Update active session
             self.active_session = {"id": session_id, "path": local_path}
 
-            return self.active_session
+            return local_path
         except Exception as e:
             logging.error(f"Error mounting session {session_id}: {str(e)}")
             raise

@@ -61,7 +61,8 @@ async def test_browser_state_integration(tmp_path):
         f.write("Initial state")
 
     active_session = await browser_state.mount(session_id)
-    mounted_file = os.path.join(active_session["path"], "state.txt")
+    mounted_file = os.path.join(active_session, "state.txt")
+    assert os.path.exists(mounted_file)
     with open(mounted_file, "r") as f:
         assert f.read() == "Initial state"
 

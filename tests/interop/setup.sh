@@ -29,15 +29,15 @@ setup_test_dir() {
     source venv/bin/activate
     
     # Upgrade pip
-    pip install --upgrade pip
+    python3 -m pip install --upgrade pip
     
     # Install Python dependencies
     print_header "Installing Python dependencies"
-    pip install boto3 google-cloud-storage redis playwright
-    python -m playwright install chromium
+    python3 -m pip install boto3 google-cloud-storage redis playwright
+    python3 -m playwright install chromium
     
     # Install Python package
-    pip install -e ../../../python
+    python3 -m pip install -e ../../../python
     
     # Initialize npm and install TypeScript package
     npm init -y

@@ -8,9 +8,9 @@ import base64
 import json
 import time
 import pathlib
-from typing import List
+from typing import List, Dict, Any, Optional
 
-# Import redis lazily
+# Import redis lazily - now just using the async version
 from ..utils.dynamic_import import redis_module
 
 from .storage_provider import StorageProvider
@@ -60,36 +60,42 @@ class RedisStorage(StorageProvider):
     """
 
     def __init__(
-        self,
-        host: str = "localhost",
-        port: int = 6379,
-        key_prefix: str = "browserstate",
-        password: str = None,
-        db: int = 0,
+        self, 
+        host: str = "localhost", 
+        port: int = 6379, 
+        key_prefix: str = "browserstate", 
+        password: Optional[str] = None, 
+        db: int = 0
     ):
         """
-        Initialize RedisStorage provider.
-
+        Initialize Redis storage
+        
         Args:
             host: Redis host address
             port: Redis port number
-            key_prefix: Prefix to use for keys in Redis. Must not contain colons.
+            key_prefix: Prefix for all keys in Redis
             password: Redis password (optional)
-            db: Redis database number (optional)
+            db: Redis database number
         """
+        # Format key_prefix to be consistent
+        if key_prefix.endswith(":"):
+            self.key_prefix = key_prefix
+        else:
+            self.key_prefix = f"{key_prefix}:"
+        
         # Validate key_prefix format
-        if ":" in key_prefix:
-            raise ValueError(
-                "key_prefix must not contain colons (:). The implementation automatically builds Redis keys in the format: {prefix}:{userId}:{sessionId}"
-            )
-
-        # Construct Redis URL from components
-        auth_part = f":{password}@" if password else ""
-        redis_url = f"redis://{auth_part}{host}:{port}/{db}"
-
-        self.redis_client = redis_module.Redis.from_url(redis_url)
-        self.key_prefix = key_prefix
-        logging.info(f"Redis storage initialized with prefix: {self.key_prefix}")
+        if ":" in key_prefix and not key_prefix.endswith(":"):
+            raise ValueError("key_prefix must not contain colons (:) except at the end")
+        
+        # Initialize async Redis client
+        redis_url = f"redis://{host}:{port}/{db}"
+        if password:
+            # Format URL with password
+            redis_url = f"redis://:{password}@{host}:{port}/{db}"
+        
+        self.redis_client = redis_module.get_module().from_url(redis_url)
+        
+        logging.info(f"Initialized Redis storage with prefix: {self.key_prefix}")
 
     def _get_key(self, user_id: str, session_id: str) -> str:
         """Generate a Redis key for a given user and session."""
@@ -98,13 +104,13 @@ class RedisStorage(StorageProvider):
             raise ValueError("user_id must not contain colons (:)")
         if ":" in session_id:
             raise ValueError("session_id must not contain colons (:)")
-        return f"{self.key_prefix}:{user_id}:{session_id}"
+        return f"{self.key_prefix}{user_id}:{session_id}"
 
     def _get_metadata_key(self, user_id: str, session_id: str) -> str:
         """Generate a Redis key for session metadata."""
         # Reuse validation from _get_key
         self._get_key(user_id, session_id)
-        return f"{self.key_prefix}:{user_id}:{session_id}:metadata"
+        return f"{self.key_prefix}{user_id}:{session_id}:metadata"
 
     def _get_temp_path(self, user_id: str, session_id: str) -> str:
         """Get a temporary path for a session."""
@@ -112,7 +118,151 @@ class RedisStorage(StorageProvider):
         os.makedirs(temp_dir, exist_ok=True)
         return os.path.join(temp_dir, session_id)
 
-    def download(self, user_id: str, session_id: str) -> str:
+    async def get(self, key: str) -> Optional[str]:
+        """
+        Get value from Redis
+        
+        Args:
+            key: Key to get
+            
+        Returns:
+            Value if found, None otherwise
+        """
+        full_key = f"{self.key_prefix}{key}"
+        
+        try:
+            data = await self.redis_client.get(full_key)
+            if not data:
+                # Create temporary path for new session
+                temp_path = self._get_temp_path(key[:key.find(':')], key[key.find(':')+1:])
+                os.makedirs(temp_path, exist_ok=True)
+                logging.info(f"No session data found for {key}, creating new directory")
+                return temp_path
+                
+            return data.decode("utf-8") if isinstance(data, bytes) else data
+        except Exception as e:
+            logging.error(f"Error getting key {key} from Redis: {e}")
+            return None
+    
+    async def set(self, key: str, value: Any) -> None:
+        """
+        Set value in Redis
+        
+        Args:
+            key: Key to set
+            value: Value to set (string or path to directory)
+        """
+        full_key = f"{self.key_prefix}{key}"
+        
+        try:
+            if os.path.isdir(value):
+                # If value is a directory path, zip it and store
+                logging.info(f"Creating zip archive of session directory: {value}")
+                import zipfile
+                import base64
+                import io
+                
+                # Create in-memory ZIP file
+                buffer = io.BytesIO()
+                with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for root, _, files in os.walk(value):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, value)
+                            zipf.write(file_path, arcname)
+                
+                # Get ZIP data and encode as base64
+                zip_data = buffer.getvalue()
+                zip_base64 = base64.b64encode(zip_data)
+                
+                logging.info(f"ZIP archive created: {len(zip_data)} bytes")
+                logging.info(f"Uploading session {key} ({len(zip_data)} bytes)")
+                
+                # Store in Redis
+                await self.redis_client.set(full_key, zip_base64)
+                
+                # Store metadata
+                metadata = {
+                    "timestamp": int(1000 * __import__("time").time()),  # milliseconds
+                    "version": "2.0",
+                    "encrypted": False
+                }
+                metadata_key = f"{full_key}:metadata"
+                await self.redis_client.set(metadata_key, json.dumps(metadata))
+                
+                logging.info(f"Successfully uploaded session {key}")
+            else:
+                # Store value directly
+                await self.redis_client.set(full_key, value)
+        except Exception as e:
+            logging.error(f"Error setting key {key} in Redis: {e}")
+            raise
+    
+    async def delete(self, key: str) -> None:
+        """
+        Delete value from Redis
+        
+        Args:
+            key: Key to delete
+        """
+        full_key = f"{self.key_prefix}{key}"
+        metadata_key = f"{full_key}:metadata"
+        
+        try:
+            await self.redis_client.delete(full_key, metadata_key)
+            logging.info(f"Deleted key {key} from Redis")
+        except Exception as e:
+            logging.error(f"Error deleting key {key} from Redis: {e}")
+    
+    async def list_sessions(self, user_id: Optional[str] = None) -> List[str]:
+        """
+        List all available sessions
+        
+        Args:
+            user_id: Optional user ID to filter sessions by
+            
+        Returns:
+            List of session identifiers
+        """
+        try:
+            # Get all keys with the prefix
+            pattern = f"{self.key_prefix}*"
+            if user_id:
+                pattern = f"{self.key_prefix}{user_id}:*"
+            
+            keys = await self.redis_client.keys(pattern)
+            
+            # Filter out metadata keys and extract session IDs
+            sessions = []
+            prefix_len = len(self.key_prefix)
+            
+            for key in keys:
+                key_str = key.decode("utf-8") if isinstance(key, bytes) else key
+                
+                # Skip metadata keys
+                if key_str.endswith(":metadata"):
+                    continue
+                
+                # Extract session ID
+                session_id = key_str[prefix_len:]
+                if ":" in session_id:  # Format: user_id:session_id
+                    if user_id:
+                        # If user_id is provided, extract just the session part
+                        if session_id.startswith(f"{user_id}:"):
+                            sessions.append(session_id.split(":", 1)[1])
+                    else:
+                        sessions.append(session_id)
+            
+            return sessions
+        except Exception as e:
+            logging.error(f"Error listing sessions from Redis: {e}")
+            return []
+    
+    async def close(self) -> None:
+        """Close Redis connection"""
+        await self.redis_client.close()
+
+    async def download(self, user_id: str, session_id: str) -> str:
         """
         Downloads a browser session from Redis, extracts the ZIP archive, and writes it
         to a local temporary directory.
@@ -130,7 +280,7 @@ class RedisStorage(StorageProvider):
         logging.info(f"Looking up session data at Redis key: {key}")
 
         # Get base64-encoded zip data from Redis
-        zip_data_base64 = self.redis_client.get(key)
+        zip_data_base64 = await self.redis_client.get(key)
 
         target_path = self._get_temp_path(user_id, session_id)
 
@@ -174,7 +324,7 @@ class RedisStorage(StorageProvider):
 
         return target_path
 
-    def upload(self, user_id: str, session_id: str, file_path: str) -> None:
+    async def upload(self, user_id: str, session_id: str, file_path: str) -> None:
         """
         Compresses the session directory into a ZIP archive and uploads it to Redis.
         Uses base64 encoding to match TypeScript implementation.
@@ -223,7 +373,7 @@ class RedisStorage(StorageProvider):
             logging.info(f"Base64 encoded data size: {len(zip_base64)} bytes")
 
             # Store in Redis
-            self.redis_client.set(key, zip_base64)
+            await self.redis_client.set(key, zip_base64)
 
             # Create metadata (matching TypeScript metadata format)
             metadata = {
@@ -233,7 +383,7 @@ class RedisStorage(StorageProvider):
             }
 
             # Store metadata in Redis
-            self.redis_client.set(metadata_key, json.dumps(metadata))
+            await self.redis_client.set(metadata_key, json.dumps(metadata))
 
             # Clean up temporary zip file
             os.remove(zip_file_path)
@@ -251,44 +401,7 @@ class RedisStorage(StorageProvider):
 
             raise
 
-    def list_sessions(self, user_id: str) -> List[str]:
-        """
-        Lists all available sessions for a user from Redis.
-
-        Args:
-            user_id: User identifier.
-
-        Returns:
-            List of session identifiers.
-        """
-        # Validate user_id
-        if ":" in user_id:
-            raise ValueError("user_id must not contain colons (:)")
-
-        pattern = f"{self.key_prefix}:{user_id}:*"
-        logging.info(f"Listing sessions with pattern: {pattern}")
-
-        try:
-            keys = self.redis_client.keys(pattern)
-            session_ids = []
-            prefix_len = len(f"{self.key_prefix}:{user_id}:")
-
-            for key in keys:
-                key_str = key.decode("utf-8") if isinstance(key, bytes) else key
-                # Extract sessionId from key
-                remaining = key_str[prefix_len:]
-
-                # Only process keys without additional colons (to exclude metadata)
-                if ":" not in remaining and remaining not in session_ids:
-                    session_ids.append(remaining)
-
-            logging.info(f"Found {len(session_ids)} sessions for user {user_id}")
-            return session_ids
-        except Exception as e:
-            logging.error(f"Error listing sessions in Redis: {e}")
-            return []
-
-    def delete_session(self, user_id: str, session_id: str) -> None:
+    async def delete_session(self, user_id: str, session_id: str) -> None:
         """
         Deletes a browser session from Redis.
 
@@ -302,7 +415,7 @@ class RedisStorage(StorageProvider):
 
         try:
             # Delete both session data and metadata
-            self.redis_client.delete(key, metadata_key)
+            await self.redis_client.delete(key, metadata_key)
             logging.info(f"Successfully deleted session {session_id}")
         except Exception as e:
             logging.error(f"Error deleting session from Redis: {e}")

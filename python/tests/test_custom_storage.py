@@ -48,7 +48,7 @@ async def test_custom_storage_provider(dummy_session_dir):
     dummy_storage.sessions[session_id] = dummy_session_dir
 
     active_session = await browser_state.mount(session_id)
-    downloaded_file = os.path.join(active_session["path"], "data.txt")
+    downloaded_file = os.path.join(active_session, "data.txt")
     assert os.path.exists(downloaded_file)
     with open(downloaded_file, "r") as f:
         assert f.read() == "Custom storage data"
@@ -60,7 +60,7 @@ async def test_custom_storage_provider(dummy_session_dir):
 
     # Remount and verify changes.
     active_session_2 = await browser_state.mount(session_id)
-    downloaded_file_2 = os.path.join(active_session_2["path"], "data.txt")
+    downloaded_file_2 = os.path.join(active_session_2, "data.txt")
     with open(downloaded_file_2, "r") as f:
         assert f.read() == "Custom storage data Updated"
 

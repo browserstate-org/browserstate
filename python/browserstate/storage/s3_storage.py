@@ -45,7 +45,7 @@ class S3Storage(StorageProvider):
             s3_kwargs["aws_access_key_id"] = access_key_id
             s3_kwargs["aws_secret_access_key"] = secret_access_key
 
-        self.s3_client = boto3.client("s3", **s3_kwargs)
+        self.s3_client = boto3.get_module().client("s3", **s3_kwargs)
 
     def _get_temp_path(self, user_id: str, session_id: str) -> str:
         """

@@ -62,10 +62,13 @@ def test_redis_storage_empty_session(fake_redis):
     shutil.rmtree(downloaded_path, ignore_errors=True)
 
 
-def test_redis_storage_validation():
+@pytest.mark.asyncio
+async def test_redis_storage_validation():
     """Test Redis storage validation without needing actual Redis."""
     # Use a mock Redis for validation tests
     mock_redis = MagicMock()
+    mock_redis_client = MagicMock()
+    mock_redis.from_url.return_value = mock_redis_client
 
     # Use patches to avoid actual Redis imports
     with patch.dict("sys.modules", {"redis": mock_redis}), patch(
@@ -76,7 +79,7 @@ def test_redis_storage_validation():
             storage = RedisStorage(
                 host="localhost", port=6379, key_prefix="browserstate"
             )
-            storage.upload("test:user", "session1", "/tmp")
+            await storage.upload("test:user", "session1", "/tmp")
             assert False, "Should have raised ValueError for colon in user_id"
         except ValueError:
             pass
@@ -86,7 +89,7 @@ def test_redis_storage_validation():
             storage = RedisStorage(
                 host="localhost", port=6379, key_prefix="browserstate"
             )
-            storage.upload("testuser", "session:1", "/tmp")
+            await storage.upload("testuser", "session:1", "/tmp")
             assert False, "Should have raised ValueError for colon in session_id"
         except ValueError:
             pass

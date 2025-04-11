@@ -39,7 +39,7 @@ class GCSStorage(StorageProvider):
         if service_account_path:
             client_kwargs["credentials"] = service_account_path
 
-        self.storage_client = google_cloud_storage.Client(**client_kwargs)
+        self.storage_client = google_cloud_storage.get_module().Client(**client_kwargs)
 
         # Get bucket reference
         self.bucket = self.storage_client.bucket(bucket_name)

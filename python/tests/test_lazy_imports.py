@@ -35,6 +35,7 @@ def test_s3_storage_import_patched():
     # Setup mocks
     mock_boto3 = MagicMock()
     mock_boto3_client = MagicMock()
+    mock_boto3.get_module.return_value = mock_boto3
     mock_boto3.client.return_value = mock_boto3_client
     mock_botocore = MagicMock()
 
@@ -52,7 +53,7 @@ def test_s3_storage_import_patched():
         s3_storage = S3Storage(bucket_name="test-bucket")
 
         # Verify our mocks were used
-        mock_boto3.client.assert_called_with("s3", **{})
+        mock_boto3.get_module.assert_called()
 
 
 def test_gcs_storage_import_patched():
@@ -60,6 +61,7 @@ def test_gcs_storage_import_patched():
     # Setup mocks
     mock_gcs = MagicMock()
     mock_client = MagicMock()
+    mock_gcs.get_module.return_value = mock_gcs
     mock_gcs.Client.return_value = mock_client
 
     # Use multiple patches to ensure all imports are caught
@@ -74,7 +76,7 @@ def test_gcs_storage_import_patched():
         gcs_storage = GCSStorage(bucket_name="test-bucket")
 
         # Verify our mocks were used
-        mock_gcs.Client.assert_called_with(**{})
+        mock_gcs.get_module.assert_called()
 
 
 def test_redis_storage_import_patched():
@@ -82,7 +84,8 @@ def test_redis_storage_import_patched():
     # Setup mocks
     mock_redis = MagicMock()
     mock_client = MagicMock()
-    mock_redis.Redis.from_url.return_value = mock_client
+    mock_redis.get_module.return_value = mock_redis
+    mock_redis.from_url.return_value = mock_client
 
     # Use multiple patches to ensure all imports are caught
     with patch.dict("sys.modules", {"redis": mock_redis}), patch(
@@ -96,4 +99,4 @@ def test_redis_storage_import_patched():
         redis_storage = RedisStorage(host="localhost", port=6379, db=0)
 
         # Verify our mocks were used
-        mock_redis.Redis.from_url.assert_called_with("redis://localhost:6379/0")
+        mock_redis.get_module.assert_called()

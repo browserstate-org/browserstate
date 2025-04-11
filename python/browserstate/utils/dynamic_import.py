@@ -1,87 +1,88 @@
 """
-Utility module for dynamic imports of optional dependencies.
+Dynamic import utilities for optional dependencies.
 """
 
 import importlib
-import sys
-from typing import Any, Dict, Type, TypeVar, Optional, Callable
+import logging
+from typing import Dict, Any, Callable, Optional
 
-# Type variable for generic return type
-T = TypeVar("T")
-
-# Cache for already imported modules
-_module_cache: Dict[str, Any] = {}
-
-# Dependency error messages
-DEPENDENCY_ERRORS = {
-    "boto3": "Please run: pip install boto3",
-    "botocore": "Please run: pip install boto3",
-    "google.cloud.storage": "Please run: pip install google-cloud-storage",
-    "redis": "Please run: pip install redis",
-}
-
-
-def import_module(module_name: str, error_message: Optional[str] = None) -> Any:
-    """
-    Dynamically import a module and cache the result.
-
-    Args:
-        module_name: Name of the module to import
-        error_message: Custom error message if import fails
-
-    Returns:
-        The imported module
-
-    Raises:
-        ImportError: If the module cannot be imported
-    """
-    # Return from cache if already imported
-    if module_name in _module_cache:
-        return _module_cache[module_name]
-
-    if not error_message:
-        error_message = DEPENDENCY_ERRORS.get(
-            module_name, f"Please install the {module_name} package."
-        )
-
-    try:
-        # Import the module
-        module = importlib.import_module(module_name)
-
-        # Cache for future use
-        _module_cache[module_name] = module
-
-        return module
-    except ImportError:
-        raise ImportError(
-            f"Failed to import optional dependency '{module_name}'. {error_message}"
-        )
-
+logger = logging.getLogger(__name__)
 
 class LazyModule:
-    """
-    A proxy class that loads a module only when it's accessed.
-    """
-
+    """Lazy module loader that only imports when accessed"""
+    
     def __init__(self, module_name: str, error_message: Optional[str] = None):
-        self._module_name = module_name
-        self._error_message = error_message
-        self._module = None
-
-    def __getattr__(self, name: str) -> Any:
         """
-        Load the module on first attribute access.
+        Initialize lazy module loader
+        
+        Args:
+            module_name: Name of the module to import
+            error_message: Custom error message on import failure
+        """
+        self.module_name = module_name
+        self.error_message = error_message
+        self._module = None
+    
+    def get_module(self) -> Any:
+        """
+        Get the module, importing it if necessary
+        
+        Returns:
+            The imported module
+        
+        Raises:
+            ImportError: If the module cannot be imported
         """
         if self._module is None:
-            self._module = import_module(self._module_name, self._error_message)
+            try:
+                self._module = importlib.import_module(self.module_name)
+            except ImportError as e:
+                msg = self.error_message or f"Could not import {self.module_name}: {e}"
+                raise ImportError(msg) from e
+        return self._module
 
-        return getattr(self._module, name)
+# Dictionary of lazy module loaders
+modules: Dict[str, LazyModule] = {
+    "boto3": LazyModule(
+        "boto3", 
+        "boto3 is required for S3 storage. Install with 'pip install boto3'"
+    ),
+    "botocore": LazyModule(
+        "botocore", 
+        "botocore is required for S3 storage. Install with 'pip install boto3'"
+    ),
+    "google.cloud.storage": LazyModule(
+        "google.cloud.storage", 
+        "google-cloud-storage is required for GCS storage. Install with 'pip install google-cloud-storage'"
+    ),
+    "extract_zip": LazyModule(
+        "extract_zip", 
+        "extract-zip is required for ZIP handling. Install with 'pip install extract-zip'"
+    ),
+    "archiver": LazyModule(
+        "archiver", 
+        "archiver is required for ZIP handling. Install with 'pip install archiver'"
+    ),
+    "aioredis": LazyModule(
+        "redis.asyncio", 
+        "Redis is required for Redis storage. Install with 'pip install redis'"
+    ),
+}
 
+# Convenience accessors for modules
+boto3 = modules["boto3"]
+botocore = modules["botocore"]
+google_cloud_storage = modules["google.cloud.storage"]
+redis_module = modules["aioredis"]
 
-# Create lazy module loaders for common dependencies
-boto3 = LazyModule("boto3", DEPENDENCY_ERRORS["boto3"])
-botocore = LazyModule("botocore", DEPENDENCY_ERRORS["botocore"])
-google_cloud_storage = LazyModule(
-    "google.cloud.storage", DEPENDENCY_ERRORS["google.cloud.storage"]
-)
-redis_module = LazyModule("redis", DEPENDENCY_ERRORS["redis"])
+def import_module(module_name: str) -> Any:
+    """
+    Import a module dynamically
+    
+    Args:
+        module_name: Name of the module to import
+        
+    Returns:
+        The imported module
+    """
+    return importlib.import_module(module_name)

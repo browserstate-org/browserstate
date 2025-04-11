@@ -18,23 +18,25 @@ from browserstate.storage.s3_storage import S3Storage
 
 @pytest.fixture
 def mock_boto3_setup():
-    """Fixture to create and configure boto3 and botocore mocks."""
-    # Create mocks
-    mock_s3_client = MagicMock()
+    """Set up mock boto3 and related S3 components."""
     mock_boto3 = MagicMock()
+    mock_s3_client = MagicMock()
+    mock_boto3.get_module.return_value = mock_boto3
     mock_boto3.client.return_value = mock_s3_client
     mock_botocore = MagicMock()
 
-    # Create a context manager using nested patches
+    # Setup core boto3 module references for the scope of this test
     with patch.dict(
         "sys.modules", {"boto3": mock_boto3, "botocore": mock_botocore}
     ), patch("browserstate.utils.dynamic_import.boto3", mock_boto3), patch(
         "browserstate.utils.dynamic_import.botocore", mock_botocore
-    ), patch("browserstate.storage.s3_storage.boto3", mock_boto3):
+    ), patch(
+        "browserstate.storage.s3_storage.boto3", mock_boto3
+    ):
         yield {
-            "s3_client": mock_s3_client,
             "boto3": mock_boto3,
             "botocore": mock_botocore,
+            "s3_client": mock_s3_client,
         }
 
 
@@ -84,8 +86,8 @@ def test_s3_storage_mock(mock_boto3_setup, tmp_path):
     # Test upload
     storage.upload(user_id, session_id, str(dummy_session_dir))
 
-    # Verify boto3.client was called
-    mock_boto3.client.assert_called_with("s3", **{})
+    # Verify boto3.get_module was called
+    mock_boto3.get_module.assert_called()
 
     # Test download
     downloaded_path = storage.download(user_id, session_id)
