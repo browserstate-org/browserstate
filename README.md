@@ -144,6 +144,16 @@ await state.unmount();
 
 ---
 
+
+## 🙏 Thanks
+
+Huge thanks to contributors who help improve BrowserState across platforms and use cases. Special appreciation to:
+
+- [@sagar448](https://github.com/sagar448) – for early feedback, bug fixes, and cross-platform testing support
+
+Want to help out? Bug reports, provider integrations, and performance tweaks are always welcome.
+
+
 ## 🤝 Contributing
 
 Open to bug reports, new storage plugins, and performance improvements. Python support is growing fast — feel free to join in.
